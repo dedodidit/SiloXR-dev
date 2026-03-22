@@ -1,0 +1,107 @@
+industry,category,product_name,unit_type,weekly_turnover_low,weekly_turnover_high,cv_estimate,lead_time_days
+retail,beverages,Coca-Cola 50cl PET,Case x12,160,200,0.22,1
+retail,beverages,Pepsi 50cl PET,Case x12,150,190,0.25,2
+retail,beverages,Sprite 330ml Can,Case x24,150,195,0.25,2
+retail,beverages,7Up 50cl PET,Case x12,145,185,0.28,2
+retail,beverages,Mirinda Orange 50cl,Case x12,130,170,0.32,2
+retail,beverages,Mountain Dew 33cl,Case x24,120,170,0.35,2
+retail,beverages,Bigi Cola 35cl PET,Case x12,170,210,0.20,1
+retail,beverages,Eva Water 75cl,Case x12,180,250,0.18,1
+retail,beverages,Aquafina 75cl,Case x12,175,230,0.20,1
+retail,beverages,Milo Refill 20g,Pack x10,140,190,0.25,2
+retail,beverages,Nutri-Milk Pineapple 500ml,Case x12,130,175,0.32,2
+retail,beverages,Chivita Active 100cl,Case x10,90,130,0.40,2
+retail,beverages,Fearless Energy Drink,Case x12,155,195,0.30,2
+retail,beverages,Supa Komado Energy Drink,Case x24,110,160,0.35,2
+retail,beverages,Lipton Ice Tea Lemon,Case x12,70,100,0.60,3
+retail,fmcg,Indomie Chicken 70g,Carton x40,150,200,0.22,2
+retail,fmcg,Maggi Star Cubes,Pack x100,130,180,0.28,2
+retail,fmcg,Maggi Chicken Cubes,Carton x100,140,190,0.26,2
+retail,fmcg,Knorr Beef Cubes,Pack x100,115,160,0.30,3
+retail,fmcg,Sunlight Detergent 25g,Sachet x50,90,130,0.45,3
+retail,fmcg,Bama Mayonnaise 385ml,Jar,70,100,0.55,3
+retail,fmcg,Mr Chef Salt 250g,Pack x80,110,160,0.35,2
+retail,fmcg,Tasty Tom Tomato Paste 65g,Pack x50,120,170,0.30,2
+retail,fmcg,Gino Tomato Paste 70g,Sachet x50,125,175,0.28,2
+retail,fmcg,Peak Milk Liquid 150g,Carton x24,80,120,0.55,3
+retail,fmcg,Nivea Radiant Body Lotion,Bottle 400ml,45,70,0.85,5
+retail,fmcg,Colgate Optic White 75ml,Tube,55,85,0.75,4
+retail,fmcg,Dettol Antibacterial Soap,Bar 160g,60,95,0.65,3
+retail,fmcg,Molfix Diapers Large,Pack,55,85,0.75,5
+retail,fmcg,Golden Penny Spaghetti 500g,Pack x1,110,160,0.35,3
+retail,grains,Dangote Sugar 1kg,Bag,120,170,0.35,3
+retail,grains,BUA Pasta 500g,Carton x20,110,150,0.38,2
+retail,grains,Garri Ijebu Paint Bucket,4kg Bucket,145,195,0.25,2
+retail,grains,Mama Gold Rice 5kg,Bag,55,85,0.70,4
+retail,grains,Fresh Onions 1kg,Bag,95,140,0.45,2
+retail,grains,Yam Medium,Tuber,60,90,0.75,3
+retail,grains,Devon King Oil 1L,Bottle,90,130,0.45,3
+retail,bakery,Rite Sausage Roll,Case x100,180,250,0.15,1
+retail,bakery,Bigi Beef Roll,Case x100,175,240,0.18,1
+retail,bakery,Flex Sausage Roll,Case x100,165,220,0.22,1
+retail,bakery,Sliced White Bread,Loaf,190,260,0.12,1
+retail,bakery,Yale Biscuits,Carton,70,110,0.60,3
+pharmacy,otc,Paracetamol 500mg M&B,Pack x96,180,250,0.15,2
+pharmacy,otc,Panadol Cold + Flu,Pack x24,120,165,0.35,2
+pharmacy,otc,Ibuprofen 400mg,Pack x20,85,125,0.45,3
+pharmacy,otc,Gaviscon Liquid 200ml,Bottle,70,100,0.55,3
+pharmacy,otc,Vitamin C 1000mg,Bottle x60,95,140,0.40,2
+pharmacy,otc,Bonjela Ulcer Gel 15g,Tube,40,65,0.95,4
+pharmacy,otc,Benylin Chesty Cough,Bottle 150ml,90,130,0.50,3
+pharmacy,otc,Aspa 75mg,Pack x100,75,110,0.60,3
+pharmacy,otc,Zyncet Cetirizine 10mg,Pack x50,80,120,0.55,4
+pharmacy,otc,Vamiron Multivitamin,Pack x30,100,150,0.30,2
+pharmacy,otc,Robb Ointment,Jar,115,160,0.38,2
+pharmacy,prescription,Lonart DS,Blister x6,125,185,0.38,3
+pharmacy,prescription,Amatem Softgel 80/480mg,Blister x6,130,190,0.35,3
+pharmacy,prescription,Augmentin 1g,Box x14,55,85,0.85,4
+pharmacy,prescription,Ciprotab 500mg,Box x14,65,95,0.75,4
+pharmacy,prescription,Amaryl 4mg,Box x30,50,75,0.90,5
+pharmacy,prescription,Atacand 16mg,Box x28,35,55,1.15,6
+pharmacy,prescription,Amlodipine 5mg Emzovasc,Box x28,60,90,0.70,4
+pharmacy,prescription,Metformin 500mg,Box x100,55,85,0.80,5
+pharmacy,prescription,Warfarin Teva 5mg,Box x28,30,50,1.35,7
+pharmacy,prescription,Allopurinol Teva 100mg,Box x28,35,55,1.25,6
+pharmacy,prescription,Questra Cholestyramine,Pack x10,30,45,1.45,7
+pharmacy,prescription,Tenoric 50/12.5mg,Box x28,45,70,0.95,5
+pharmacy,prescription,Virest Aciclovir 200mg,Box x25,40,65,1.05,5
+pharmacy,prescription,Jardiance 10mg,Box x30,30,40,1.50,7
+pharmacy,prescription,Sayana Press,Unit,50,85,0.80,4
+pharmacy,consumables,Durex Performa Condoms,Pack x3,95,135,0.40,3
+pharmacy,consumables,Trojan Pleasure Pack,Pack x3,90,130,0.42,3
+pharmacy,consumables,Accu-Chek Instant Strips,Box x50,45,75,0.90,6
+pharmacy,consumables,Face Masks 3-Ply,Box x50,60,100,0.65,4
+pharmacy,consumables,Omron BP Monitor M3,Unit,30,45,1.45,7
+pharmacy,consumables,Omron Nebulizer C28P,Unit,30,40,1.50,7
+pharmacy,consumables,Digital Thermometer,Unit,30,50,1.30,7
+pharmacy,consumables,Cotton Wool 300g,Roll,55,85,0.70,4
+pharmacy,consumables,Alcohol Based Hand Sanitizer,Bottle,85,130,0.45,3
+pharmacy,consumables,Disposable Syringe 5ml,Box x100,70,105,0.65,4
+pharmacy,consumables,RDT Malaria Test Kit,Unit,135,185,0.30,3
+wholesale,bulk_goods,Rice Long Grain,50kg Bag,150,250,0.25,4
+wholesale,bulk_goods,Refined Sugar,50kg Bag,140,220,0.30,4
+wholesale,bulk_goods,Vegetable Oil Power,25L Jerrycan,120,180,0.35,5
+wholesale,bulk_goods,Palm Oil Grade A,25L Keg,80,120,0.50,5
+wholesale,bulk_goods,Wheat Flour Golden Penny,50kg Bag,100,150,0.45,5
+wholesale,bulk_goods,Garri Ijebu Bulk,50kg Bag,145,215,0.32,4
+wholesale,bulk_goods,Salt NASCON,25kg Bag,115,165,0.38,5
+wholesale,bulk_goods,Cement Dangote,50kg Bag,160,240,0.22,4
+wholesale,bulk_goods,Granite 20 Tons,Trip,50,80,1.10,7
+wholesale,bulk_goods,Sand Crete Block 9x9x18,Unit,150,220,0.25,3
+wholesale,bulk_goods,Timber Soft Wood Afara,Length,70,110,0.60,4
+wholesale,bulk_goods,Guinea Corn,Paint Bucket,135,185,0.30,3
+wholesale,bulk_goods,Millet Paint,Bucket,130,180,0.35,3
+wholesale,distributors,Coca-Cola 50cl PET,Pallet x100cs,110,160,0.40,3
+wholesale,distributors,Bigi Soft Drinks Bulk,Pallet x120cs,125,185,0.35,3
+wholesale,distributors,Pepsi Bulk,Pallet x100cs,120,180,0.35,3
+wholesale,distributors,Indomie Noodles Bulk,Pallet x80ctn,130,190,0.28,3
+wholesale,distributors,Eva Water Bulk,Pallet x120cs,150,220,0.25,3
+wholesale,distributors,Peak Milk Powder Bulk,Pallet x50ctn,70,110,0.65,5
+wholesale,distributors,Milo Bulk Refill,Pallet x60ctn,75,115,0.60,4
+wholesale,distributors,Sunlight Detergent Bulk,Pallet x70ctn,65,95,0.70,4
+wholesale,distributors,Dettol Soap Bulk,Pallet x50ctn,50,80,0.90,6
+wholesale,distributors,LG Standard Split 1HP AC,Unit,35,55,1.20,6
+wholesale,distributors,Hisense 1.5L Blender,Unit,45,75,0.90,5
+wholesale,bulk_goods,Fertilizer NPK,50kg Bag,50,80,1.10,7
+wholesale,bulk_goods,Poultry Feed Broiler,25kg Bag,110,170,0.40,5
+wholesale,bulk_goods,Cooking Gas LPG,12.5kg Cyl,90,140,0.48,3

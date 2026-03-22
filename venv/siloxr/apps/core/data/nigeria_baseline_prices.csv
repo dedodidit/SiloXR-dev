@@ -1,0 +1,31 @@
+industry,category,product_name,unit_type,bulk_price_naira,unit_price_naira,weekly_turnover_low,weekly_turnover_high,cv_estimate,lead_time_days
+retail,beverages,Coca-Cola 50cl PET,Case x12,4400,366.67,160,200,0.22,1
+retail,beverages,Pepsi 50cl PET,Case x12,4376,364.67,150,190,0.25,2
+retail,beverages,Bigi Cola 35cl PET,Case x12,2450,204.17,170,210,0.20,1
+retail,beverages,Eva Water 1.5L PET,Case x12,4000,333.33,180,250,0.18,1
+retail,beverages,Chivita Active 1L,Case x10,22100,2210.00,90,130,0.40,2
+retail,fmcg,Milo 3-in-1 (30g),Carton x140,40250,287.50,140,190,0.25,2
+retail,fmcg,Morning Fresh 450ml,Case x18,19350,1075.00,70,100,0.55,3
+retail,fmcg,Mr Chef Salt 250g,Pack x80,9219,115.24,110,160,0.35,2
+retail,fmcg,Joy Soap 65g,Case x96,30760,320.42,60,95,0.65,3
+retail,fmcg,Indomie Chicken 70g,Carton x40,13500,337.50,150,200,0.22,2
+retail,grains,Rice Local (Loose),1kg,2144,2144.00,90,130,0.45,3
+retail,grains,Garri White,1kg,1345,1345.00,110,160,0.38,3
+retail,grains,Yam Tuber,1kg,2249,2249.00,60,90,0.75,3
+retail,bakery,Sliced White Bread,450g Loaf,1740,1740.00,190,260,0.12,1
+pharmacy,otc,Paracetamol 500mg M&B,Pack x96,3600,37.50,180,250,0.15,2
+pharmacy,otc,Panadol Cold + Flu,Pack x24,17280,720.00,120,165,0.35,2
+pharmacy,otc,Vitamin C 1000mg,Bottle x60,13840,230.67,95,140,0.40,2
+pharmacy,prescription,Augmentin 1g,Box x14,14200,1014.29,55,85,0.85,4
+pharmacy,prescription,Amaryl 4mg,Box x30,22500,750.00,50,75,0.90,5
+pharmacy,prescription,Atacand 16mg,Box x28,52010,1857.50,35,55,1.15,6
+pharmacy,consumables,Durex Performa,Pack x3,8500,2833.33,95,135,0.40,3
+pharmacy,consumables,Accu-Chek Instant Strips,Box x50,25200,504.00,45,75,0.90,6
+pharmacy,consumables,Exam Gloves,Box x100,6500,65.00,60,100,0.65,4
+wholesale,bulk_goods,Cement Dangote,50kg Bag,6500,6500.00,160,240,0.22,4
+wholesale,bulk_goods,Sharp Sand,20 Ton Trip,60000,60000.00,50,80,1.10,7
+wholesale,bulk_goods,Granite,20 Ton Trip,180000,180000.00,40,60,1.20,7
+wholesale,bulk_goods,Palm Oil (25 Litres),Jerrycan,30000,1200.00,80,120,0.50,5
+wholesale,distributors,LG Standard Split 1HP AC,Unit,287760,287760.00,35,55,1.20,6
+wholesale,distributors,Hisense 1.5L Blender,Unit,80660,80660.00,45,75,0.90,5
+wholesale,distributors,2.5mm Cable Coil,100m Coil,15000,150.00,60,95,0.70,5

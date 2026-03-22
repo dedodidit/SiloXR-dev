@@ -1,0 +1,52 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+env/
+venv/*
+!venv/siloxr/
+!venv/siloxr/**
+
+# Django / local settings / databases
+*.sqlite3
+db.sqlite3
+db.backup.sqlite3
+*.log
+docs/data/
+
+# Local env files
+.env
+.env.*
+!.env.production.example
+
+# Frontend
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+frontend/.cache/
+
+# Archives / generated bundles
+*.zip
+
+# Coverage / temp
+coverage/
+htmlcov/
+tmp/
+temp/
+
+# Python cache inside tracked backend path
+venv/siloxr/**/__pycache__/
+venv/siloxr/**/*.pyc
+venv/siloxr/**/*.pyo
