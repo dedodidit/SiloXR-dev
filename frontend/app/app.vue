@@ -189,7 +189,6 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
     </div>
 
     <TourOverlay v-if="(isDashboard || isWorkspace) && showHeader" />
-    <OfflineBanner v-if="!isWorkspace" />
   </div>
 </template>
 

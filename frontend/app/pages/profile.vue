@@ -16,6 +16,9 @@ const verifying = ref(false)
 const phoneInput = ref("")
 const telegramLinking = ref(false)
 const telegramLink = ref<any>(null)
+const showOldPassword = ref(false)
+const showNewPassword = ref(false)
+const showConfirmPassword = ref(false)
 
 const form = reactive({
   business_name: "",
@@ -277,15 +280,30 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
         <div class="profile-fields">
           <div class="field">
             <label class="field__label">Current password</label>
-            <input v-model="pwdForm.old_password" class="field__input" type="password" />
+            <div class="field__input-wrap">
+              <input v-model="pwdForm.old_password" class="field__input" :type="showOldPassword ? 'text' : 'password'" autocomplete="current-password" />
+              <button type="button" class="field__toggle" @click="showOldPassword = !showOldPassword">
+                {{ showOldPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
           </div>
           <div class="field">
             <label class="field__label">New password</label>
-            <input v-model="pwdForm.new_password" class="field__input" type="password" />
+            <div class="field__input-wrap">
+              <input v-model="pwdForm.new_password" class="field__input" :type="showNewPassword ? 'text' : 'password'" autocomplete="new-password" />
+              <button type="button" class="field__toggle" @click="showNewPassword = !showNewPassword">
+                {{ showNewPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
           </div>
           <div class="field">
             <label class="field__label">Confirm new password</label>
-            <input v-model="pwdForm.confirm" class="field__input" type="password" />
+            <div class="field__input-wrap">
+              <input v-model="pwdForm.confirm" class="field__input" :type="showConfirmPassword ? 'text' : 'password'" autocomplete="new-password" />
+              <button type="button" class="field__toggle" @click="showConfirmPassword = !showConfirmPassword">
+                {{ showConfirmPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
           </div>
         </div>
         <p v-if="pwdMsg" class="profile-msg" :class="pwdMsg.includes('successfully') ? 'profile-msg--ok' : 'profile-msg--err'">
@@ -336,6 +354,9 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
   flex-direction: column;
   gap: 6px;
 }
+.field__input-wrap {
+  position: relative;
+}
 .field__label {
   font-size: 12px;
   font-weight: 600;
@@ -351,6 +372,18 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
   border-radius: 12px;
   background: var(--bg-card);
   color: var(--text);
+}
+.field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .profile-msg {
   font-size: 12px;

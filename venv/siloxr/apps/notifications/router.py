@@ -44,6 +44,8 @@ WHATSAPP_CONF_FLOOR = 0.70
 WHATSAPP_COOLDOWN_HOURS = 6
 WHATSAPP_MAX_PER_DAY    = 1
 
+REMINDER_THROTTLE_CHANNEL = "upd_reminder"
+
 
 @dataclass
 class RoutingResult:
@@ -138,6 +140,135 @@ class NotificationRouter:
         )
         return result
 
+    def route_insight(self, user, product, insight) -> RoutingResult:
+        """
+        Route a non-decision insight through the user's active notification
+        preferences while always keeping an in-app record.
+        """
+        from apps.notifications.dispatch import _send_email_message
+        from apps.notifications.models import Notification
+        from apps.notifications.telegram import send_insight
+
+        result = RoutingResult()
+        title = getattr(insight, "title", "") or getattr(insight, "observation", "") or f"Insight: {product.name}"
+        body = getattr(insight, "message", "") or getattr(insight, "reasoning", "") or ""
+        confidence = float(getattr(insight, "confidence", 0.5) or 0.5)
+
+        if not body:
+            return result
+
+        Notification.objects.create(
+            user=user,
+            channel=Notification.CHANNEL_IN_APP,
+            title=title[:255],
+            body=body,
+            confidence=confidence,
+        )
+        result.in_app = True
+
+        if self._should_telegram(user, None):
+            try:
+                profile = user.telegram_profile
+                if send_insight(
+                    profile.chat_id,
+                    {
+                        "title": title,
+                        "reasoning": body,
+                        "confidence": confidence,
+                        "product_name": product.name,
+                        "date_signal": getattr(insight, "date_signal", ""),
+                    },
+                ):
+                    result.telegram = True
+            except Exception as exc:
+                logger.error("Telegram insight routing error: %s", exc, exc_info=True)
+                result.skipped.append("telegram")
+
+        if self._should_email(user, None, result):
+            try:
+                email_body = f"{title}\n\n{body}"
+                _send_email_message(user, title[:255], email_body)
+                result.email = True
+            except Exception as exc:
+                logger.error("Email insight routing error: %s", exc, exc_info=True)
+                result.skipped.append("email")
+
+        return result
+
+    def route_product_update_reminder(self, user, products, cadence_hours: int = 24) -> RoutingResult:
+        """
+        Send a grouped reminder asking the user to refresh stale product counts.
+        The reminder respects the user's preferred channel and is throttled so it
+        can be scheduled frequently without causing noise.
+        """
+        from apps.notifications.dispatch import (
+            _build_product_update_body,
+            _build_product_update_email_html,
+            _build_product_update_title,
+            _send_email_message,
+            _send_whatsapp_message,
+        )
+        from apps.notifications.models import Notification, NotificationThrottle
+        from apps.notifications.telegram import send_product_update_reminder
+
+        result = RoutingResult()
+        products = list(products or [])
+        if not products:
+            return result
+
+        throttle = NotificationThrottle.objects.filter(
+            user=user,
+            product=None,
+            channel=REMINDER_THROTTLE_CHANNEL,
+        ).first()
+        if throttle and throttle.is_throttled(cadence_hours, 1):
+            result.skipped.append("cadence")
+            return result
+
+        title = _build_product_update_title(products)
+        body = _build_product_update_body(products)
+        html = _build_product_update_email_html(user, products, title, body)
+
+        Notification.objects.create(
+            user=user,
+            channel=Notification.CHANNEL_IN_APP,
+            title=title[:255],
+            body=body,
+            confidence=0.4,
+        )
+        result.in_app = True
+
+        preferred = getattr(user, "preferred_channel", "email")
+
+        if preferred == "telegram" and self._should_telegram(user, None):
+            try:
+                profile = user.telegram_profile
+                if send_product_update_reminder(profile.chat_id, products):
+                    result.telegram = True
+            except Exception as exc:
+                logger.error("Telegram reminder routing error: %s", exc, exc_info=True)
+                result.skipped.append("telegram")
+        elif preferred == "whatsapp" and self._should_whatsapp_reminder(user):
+            try:
+                if _send_whatsapp_message(user, title, body):
+                    result.whatsapp = True
+            except Exception as exc:
+                logger.error("WhatsApp reminder routing error: %s", exc, exc_info=True)
+                result.skipped.append("whatsapp")
+
+        if self._should_email(user, None, result):
+            try:
+                if _send_email_message(user, title[:255], body, html):
+                    result.email = True
+            except Exception as exc:
+                logger.error("Email reminder routing error: %s", exc, exc_info=True)
+                result.skipped.append("email")
+
+        if result.any_delivered:
+            NotificationThrottle.record(user, None, REMINDER_THROTTLE_CHANNEL)
+
+        return result
+
     def _should_telegram(self, user, decision) -> bool:
         """Send via Telegram if user has linked their account and it's enabled."""
         preferred = getattr(user, "preferred_channel", "email")
@@ -150,6 +281,14 @@ class NotificationRouter:
             return profile.is_active
         except Exception:
             return False
+
+    def _should_whatsapp_reminder(self, user) -> bool:
+        """WhatsApp reminder delivery for users who explicitly prefer the channel."""
+        return bool(
+            getattr(user, "is_pro", False)
+            and getattr(user, "phone_number", "")
+            and getattr(user, "whatsapp_enabled", False)
+        )
 
     def _should_whatsapp(self, user, decision, product) -> bool:
         """WhatsApp: Pro only, confidence gated, severity gated, throttled."""

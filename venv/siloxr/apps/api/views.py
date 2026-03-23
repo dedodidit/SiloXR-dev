@@ -1197,7 +1197,7 @@ def register(request):
             from django.conf import settings as djsettings
 
             token = generate_link_token(user)
-            telegram_bot_user = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot")
+            telegram_bot_user = (getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot") or "siloxr_bot").strip().lstrip("@")
             telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
         except Exception as exc:
             logger.error("Telegram signup link generation failed for %s: %s", user.username, exc, exc_info=True)
@@ -2012,9 +2012,23 @@ def telegram_link_token(request):
     from apps.notifications.telegram import generate_link_token
     from django.conf import settings as djsettings
 
-    token    = generate_link_token(request.user)
-    bot_user = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot")
-    link     = f"https://t.me/{bot_user}?start={token}"
+    bot_user = (getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot") or "siloxr_bot").strip().lstrip("@")
+    if not bot_user:
+        return Response(
+            {"detail": "Telegram linking is not configured yet."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    try:
+        token = generate_link_token(request.user)
+    except Exception as exc:
+        logger.error("Telegram link generation failed for %s: %s", request.user.username, exc, exc_info=True)
+        return Response(
+            {"detail": "Telegram linking is temporarily unavailable. Please try again shortly."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    link = f"https://t.me/{bot_user}?start={token}"
 
     return Response({
         "token":    token,

@@ -9,7 +9,7 @@ The bot must be set up at @BotFather first.
 Linking flow:
   1. User clicks "Connect Telegram" in profile
   2. They open the bot and send /start {link_token}
-  3. Bot webhook calls /api/v1/telegram/webhook/
+  3. Bot webhook calls /api/telegram/webhook/
   4. We match token to user, create TelegramProfile
 
 Interactive feedback:
@@ -23,7 +23,10 @@ import json
 import logging
 from datetime import timedelta
 
-import requests
+try:
+    import requests
+except ImportError:  # pragma: no cover - environment-dependent fallback
+    requests = None
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
@@ -39,6 +42,9 @@ def _api(method: str, **kwargs) -> dict | None:
     token = getattr(settings, "TELEGRAM_BOT_TOKEN", "")
     if not token:
         logger.warning("TELEGRAM_BOT_TOKEN not set — skipping Telegram call")
+        return None
+    if requests is None:
+        logger.warning("requests is not installed — skipping Telegram call")
         return None
     try:
         url  = BOT_API.format(token=token, method=method)
@@ -148,6 +154,50 @@ def send_decision_alert(chat_id: int, decision, product) -> bool:
     return bool(result and result.get("ok"))
 
 
+def send_product_update_reminder(chat_id: int, products) -> bool:
+    """
+    Send a grouped reminder asking the user to refresh stale product counts.
+    """
+    if not products:
+        return False
+
+    lines = [
+        "\U0001F4E6 *Stock update needed*",
+        "",
+        "A few products need a fresh stock count so SiloXR can keep guidance accurate:",
+        "",
+    ]
+
+    now = timezone.now()
+    for product in products:
+        if product.last_verified_at:
+            stale_days = max(1, (now - product.last_verified_at).days)
+            status = f"{stale_days} day{'s' if stale_days != 1 else ''} since last count"
+        else:
+            status = "no stock count logged yet"
+        lines.append(f"• *{product.name}* ({product.sku}) — {status}")
+
+    frontend = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+    text = "\n".join(lines)
+    keyboard = {
+        "inline_keyboard": [[
+            {"text": "\U0001F4CA Open dashboard", "callback_data": "open_dashboard"},
+        ]]
+    }
+
+    if frontend:
+        text = f"{text}\n\nOpen dashboard: {frontend}/products"
+
+    result = _api(
+        "sendMessage",
+        chat_id=chat_id,
+        text=text,
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
+    return bool(result and result.get("ok"))
+
+
 def generate_link_token(user) -> str:
     """
     Generate a short-lived token the user sends to the bot to link their account.
@@ -241,7 +291,7 @@ def _handle_callback(callback: dict) -> None:
             _record_telegram_feedback(decision_id, rating, callback)
 
     elif data == "open_dashboard":
-        frontend = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+        frontend = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
         _api("sendMessage", chat_id=chat_id,
              text=f"\U0001F4CA Open your dashboard: {frontend}")
 
