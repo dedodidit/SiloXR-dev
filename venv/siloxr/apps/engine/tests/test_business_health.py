@@ -170,5 +170,6 @@ def test_service_builds_report_from_products_and_baselines():
     assert report["demand_gaps"][0]["name"] == "Sliced White Bread"
     assert report["demand_gaps"][0]["gap_revenue"] == 11200.0
     assert report["demand_gaps"][1]["name"] == "Coca-Cola 50cl PET"
-    assert "Closing the top 3 gaps could increase weekly revenue" in " ".join(report["insights"])
+    assert "The top 3 benchmark gaps account for about" in " ".join(report["insights"])
+    assert "benchmark comparison shows a weekly revenue gap" in report["investor_summary"]
     assert "approximately ₦103,600.00 per month" in report["investor_summary"]

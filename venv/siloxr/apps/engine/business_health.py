@@ -268,21 +268,17 @@ def _build_insights(
     if demand_gaps:
         top_gap = demand_gaps[0]
         insights.append(
-            f"You may be missing {_format_currency(top_gap['gap_revenue'], currency)}/week from {top_gap['name']}."
+            f"{top_gap['name']} is currently tracking {_format_currency(top_gap['gap_revenue'], currency)}/week below benchmark revenue."
         )
         insights.append(
-            f"Demand for {top_gap['name']} exceeds current observed sales by about {round(top_gap['gap_units'], 1)} units/week."
+            f"Observed weekly sales for {top_gap['name']} are about {round(top_gap['gap_units'], 1)} units below the benchmark level."
         )
 
         top_three_gap_value = sum(item["gap_revenue"] for item in demand_gaps[:3])
-        if weekly_revenue > 0 and top_three_gap_value > 0:
-            uplift_pct = round((top_three_gap_value / weekly_revenue) * 100)
+        if potential_revenue_gap_weekly > 0 and top_three_gap_value > 0:
+            share_pct = round((top_three_gap_value / potential_revenue_gap_weekly) * 100)
             insights.append(
-                f"Closing the top 3 gaps could increase weekly revenue by about {uplift_pct}%."
-            )
-        elif top_three_gap_value > 0:
-            insights.append(
-                f"Closing the top 3 gaps could unlock {_format_currency(top_three_gap_value, currency)}/week in new revenue."
+                f"The top 3 benchmark gaps account for about {share_pct}% of the current weekly revenue gap."
             )
 
     if top_products:
@@ -320,16 +316,15 @@ def _build_investor_summary(
         )
 
     leakage_clause = (
-        f"Current analysis suggests a weekly revenue leakage of {_format_currency(potential_revenue_gap_weekly, currency)} due to unmet demand. "
+        f"Current benchmark comparison shows a weekly revenue gap of {_format_currency(potential_revenue_gap_weekly, currency)} between observed sales and benchmark demand levels. "
         if potential_revenue_gap_weekly > 0
-        else "Current analysis does not show a material weekly revenue leakage from unmet demand. "
+        else "Current benchmark comparison does not show a material weekly revenue gap between observed sales and benchmark demand levels. "
     )
     return (
         f"This business processes approximately {_format_currency(monthly_revenue, currency)} per month "
         f"({_format_currency(weekly_revenue, currency)} per week), with key revenue drivers in {top_names}. "
         f"{leakage_clause}"
-        f"The confidence level on this view is {round(confidence_score * 100)}%, and addressing the most visible demand gaps presents "
-        f"a clear opportunity for revenue growth without significant expansion."
+        f"The confidence level on this view is {round(confidence_score * 100)}%, and the report highlights where commercial performance is currently strongest and where it trails benchmark demand."
     )
 
 

@@ -384,7 +384,7 @@ const businessHealthInsights = computed(() => {
   const insights: string[] = []
   if (analyticsGapWeekly.value > 0 && businessHealthDemandGaps.value.length) {
     insights.push(
-      `${businessHealthDemandGaps.value.length} visible demand gap${businessHealthDemandGaps.value.length === 1 ? "" : "s"} could be costing about ${formatCurrency(analyticsGapWeekly.value)} per week.`
+      `${businessHealthDemandGaps.value.length} benchmark gap${businessHealthDemandGaps.value.length === 1 ? "" : "s"} currently account for about ${formatCurrency(analyticsGapWeekly.value)} per week in revenue shortfall.`
     )
   }
   if (businessHealthTopProducts.value.length) {
@@ -411,19 +411,19 @@ const investorSummary = computed(() => {
 
   const driverNames = businessHealthTopProducts.value.slice(0, 3).map((item: any) => item.name).join(", ") || "current tracked products"
   if (analyticsWeeklyRevenue.value <= 0) {
-    return "This business health view is ready, but it needs more live inventory and sales activity before monthly revenue can be estimated with confidence."
+    return "This business health view is ready, but it needs more live inventory and sales activity before it can describe revenue performance with confidence."
   }
   const gapClause = analyticsGapWeekly.value > 0
-    ? `Current analysis suggests about ${formatCurrency(analyticsGapWeekly.value)} per week may still be leaking through unmet demand.`
-    : "Current analysis does not show a material weekly revenue leakage from unmet demand."
+    ? `Current benchmark comparison shows about ${formatCurrency(analyticsGapWeekly.value)} per week in revenue shortfall between observed sales and benchmark demand levels.`
+    : "Current benchmark comparison does not show a material weekly revenue shortfall between observed sales and benchmark demand levels."
   return `This business is currently processing about ${formatCurrency(analyticsMonthlyRevenue.value)} per month, with key revenue drivers in ${driverNames}. ${gapClause} The confidence level on this operating view is ${Math.round(analyticsConfidence.value * 100)}%.`
 })
 const healthPillars = computed(() => [
   {
     title: "Coverage health",
-    value: Number(summary.value?.stockouts_within_7d ?? 0),
-    label: "products projected to stock out soon",
-    tone: Number(summary.value?.stockouts_within_7d ?? 0) > 0 ? "danger" : "safe",
+    value: Number(summary.value?.total_products ?? inventoryStore.products.length ?? 0),
+    label: "tracked products represented in this view",
+    tone: Number(summary.value?.total_products ?? inventoryStore.products.length ?? 0) > 0 ? "safe" : "warning",
   },
   {
     title: "Verification debt",
@@ -432,20 +432,20 @@ const healthPillars = computed(() => [
     tone: Number(summary.value?.stale_products_count ?? 0) > 0 ? "warning" : "safe",
   },
   {
-    title: "Decision pressure",
-    value: Number(summary.value?.products_needing_action ?? 0),
-    label: "products currently need action",
-    tone: Number(summary.value?.products_needing_action ?? 0) > 0 ? "danger" : "safe",
+    title: "Observed gaps",
+    value: businessHealthDemandGaps.value.length,
+    label: "benchmark gaps visible across tracked products",
+    tone: businessHealthDemandGaps.value.length > 0 ? "warning" : "safe",
   },
 ])
 const businessHealthPrimaryTitle = computed(() => {
   const monthlyRevenue = analyticsMonthlyRevenue.value
-  if (monthlyRevenue <= 0) return "More live operating data will sharpen the business story"
-  return `Estimated monthly revenue is ${formatCurrency(monthlyRevenue)}`
+  if (monthlyRevenue <= 0) return "More live operating data will sharpen the current business picture"
+  return `Current monthly revenue pace is ${formatCurrency(monthlyRevenue)}`
 })
 const businessHealthHeroCopy = computed(() => {
   if (investorSummary.value) return investorSummary.value
-  return "This workspace turns live inventory and demand signals into a clean commercial summary you can review, export, and share."
+  return "This workspace turns live inventory and demand signals into a descriptive commercial summary you can review, export, and share."
 })
 const businessHealthGapCoverage = computed(() => {
   const weeklyRevenue = analyticsWeeklyRevenue.value
@@ -742,8 +742,8 @@ watch(dashboardRefreshTick, async () => {
             <p class="workspace__panel-copy">
               {{
                 businessHealthGapCoverage != null
-                  ? `Closing visible gaps could add about ${businessHealthGapCoverage}% on top of current weekly revenue.`
-                  : "No material weekly revenue leakage is currently visible from unmet demand."
+                  ? `Visible benchmark gaps equal about ${businessHealthGapCoverage}% of current weekly revenue.`
+                  : "No material weekly revenue shortfall is currently visible against benchmark demand."
               }}
             </p>
           </div>
@@ -790,7 +790,7 @@ watch(dashboardRefreshTick, async () => {
                   <span class="workspace__rank-badge">{{ index + 1 }}</span>
                   <div>
                     <p class="workspace__rank-title">{{ product.name }}</p>
-                    <p class="workspace__rank-sub">Estimated weekly revenue contribution</p>
+                    <p class="workspace__rank-sub">Current weekly revenue contribution</p>
                   </div>
                 </div>
                 <strong class="workspace__rank-value">{{ formatCurrency(Number(product.estimated_weekly_revenue ?? 0)) }}</strong>
@@ -814,7 +814,7 @@ watch(dashboardRefreshTick, async () => {
         <div class="workspace__grid workspace__grid--health">
           <div class="workspace__support surface">
             <p class="workspace__panel-eyebrow">Demand gap breakdown</p>
-            <h3 class="workspace__panel-title">Where expected weekly demand is still ahead of observed demand.</h3>
+            <h3 class="workspace__panel-title">Where benchmark weekly demand is currently ahead of observed weekly sales.</h3>
             <div v-if="businessHealthDemandGaps.length" class="workspace__health-gap-list">
               <div
                 v-for="gap in businessHealthDemandGaps"
@@ -824,14 +824,14 @@ watch(dashboardRefreshTick, async () => {
                 <div>
                   <p class="workspace__demand-name">{{ gap.name }}</p>
                   <p class="workspace__demand-sub">
-                    Expected {{ Math.round(Number(gap.expected_weekly_demand ?? 0)) }}/week
+                    Benchmark {{ Math.round(Number(gap.expected_weekly_demand ?? 0)) }}/week
                     - observed {{ Math.round(Number(gap.observed_weekly_demand ?? 0)) }}/week
                     - confidence {{ Math.round(Number(gap.confidence ?? 0) * 100) }}%
                   </p>
                 </div>
                 <div class="workspace__health-gap-metrics">
                   <strong>{{ formatCurrency(Number(gap.gap_revenue ?? 0)) }}/week</strong>
-                  <span>{{ Math.round(Number(gap.gap_units ?? 0)) }} units gap</span>
+                  <span>{{ Math.round(Number(gap.gap_units ?? 0)) }} units below benchmark</span>
                 </div>
               </div>
             </div>
@@ -844,14 +844,14 @@ watch(dashboardRefreshTick, async () => {
               <button v-if="selectedProduct" type="button" class="workspace__starter" @click="recordStarterSale">
                 <span class="workspace__starter-tag">Capture demand</span>
                 <strong>Record a live sale</strong>
-                <span>That gives the analytics layer a stronger demand baseline to compare against.</span>
+                <span>That gives the analytics layer a stronger observed demand base to compare against.</span>
               </button>
             </div>
           </div>
 
           <div class="workspace__support surface">
             <p class="workspace__panel-eyebrow">Report insights</p>
-            <h3 class="workspace__panel-title">Operational takeaways translated into business language.</h3>
+            <h3 class="workspace__panel-title">Descriptive operating takeaways translated into business language.</h3>
             <div class="workspace__insight-list">
               <div
                 v-for="(insight, index) in businessHealthInsights"
@@ -867,8 +867,8 @@ watch(dashboardRefreshTick, async () => {
 
         <div class="workspace__grid workspace__grid--health">
           <div class="workspace__support surface workspace__support--investor">
-            <p class="workspace__panel-eyebrow">Investor summary</p>
-            <h3 class="workspace__panel-title">A clean narrative that can feed monthly reports and partner views.</h3>
+            <p class="workspace__panel-eyebrow">Executive summary</p>
+            <h3 class="workspace__panel-title">A descriptive narrative for monthly reports and partner views.</h3>
             <p class="workspace__investor-summary">{{ investorSummary }}</p>
             <div class="workspace__investor-tags">
               <span class="workspace__tag">Dashboard-ready</span>

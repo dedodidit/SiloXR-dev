@@ -31,8 +31,8 @@ export const workspaceSections: WorkspaceSection[] = [
   {
     slug: "business-health",
     title: "Business health",
-    description: "Turn operating data into a structured revenue, gap, and investor-readiness report.",
-    helper: "Investor summary, revenue picture, top products, and demand gaps in one report workspace.",
+    description: "Turn operating data into a structured descriptive view of revenue, gaps, and business condition.",
+    helper: "Executive summary, revenue picture, top products, and benchmark gaps in one report workspace.",
     icon: "M4 19h16M7 16l3-4 3 2 4-6 3 2",
   },
   {
