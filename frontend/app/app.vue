@@ -60,19 +60,31 @@ onMounted(async () => {
   }
 })
 
+watch(currentUser, (nextUser) => {
+  if (nextUser) user.value = nextUser
+})
+
 const openAccountSettings = () => {
   router.push("/profile")
 }
 
-const userInitial = computed(() =>
-  (user.value?.username?.[0] ?? "?").toUpperCase()
-)
+const headerUser = computed(() => currentUser.value || user.value || null)
+
 const displayUserName = computed(() => {
-  const raw = String(user.value?.username ?? "").trim()
-  if (!raw) return "..."
+  const raw = String(
+    headerUser.value?.business_name
+      || headerUser.value?.first_name
+      || headerUser.value?.username
+      || headerUser.value?.email?.split?.("@")?.[0]
+      || ""
+  ).trim()
+  if (!raw) return "Account"
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 })
-const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
+const userInitial = computed(() =>
+  displayUserName.value.trim().charAt(0).toUpperCase() || "S"
+)
+const isFreeUser = computed(() => Boolean(headerUser.value) && !headerUser.value?.is_pro)
 </script>
 
 <template>
@@ -126,7 +138,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
       <div class="app-header__right">
 
         <!-- Pro badge with shimmer -->
-        <div v-if="user?.is_pro" class="app-header__pro-badge shimmer-badge">
+        <div v-if="headerUser?.is_pro" class="app-header__pro-badge shimmer-badge">
           <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
             <path d="M4 1L5.2 3.2L7.6 3.6L5.8 5.4L6.2 7.8L4 6.6L1.8 7.8L2.2 5.4L0.4 3.6L2.8 3.2L4 1Z"
               fill="currentColor"/>
@@ -173,7 +185,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
           <div class="app-header__avatar">{{ userInitial }}</div>
           <div class="app-header__user-info">
             <span class="app-header__user-name">{{ displayUserName }}</span>
-            <span class="app-header__user-role">{{ user?.is_pro ? 'Pro' : 'Free' }}</span>
+            <span class="app-header__user-role">{{ headerUser?.is_pro ? 'Pro' : 'Free' }}</span>
           </div>
         </button>
 
