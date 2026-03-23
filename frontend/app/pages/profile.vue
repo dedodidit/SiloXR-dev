@@ -123,6 +123,10 @@ const getTelegramLink = async () => {
   msg.value = ""
   try {
     telegramLink.value = await $api("/telegram/link/")
+    if (process.client && telegramLink.value?.link) {
+      window.open(telegramLink.value.link, "_blank", "noopener,noreferrer")
+      msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
+    }
   } catch (e: any) {
     msg.value = e?.data?.detail ?? "Could not generate Telegram link."
   } finally {
@@ -219,7 +223,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
       <section class="profile-section surface">
         <h2 class="profile-section__title">Telegram notifications</h2>
         <p class="t-body" style="margin-bottom:14px">
-          Telegram must be linked to your SiloXR account before it can be used for real-time notifications.
+          Telegram must be linked to your SiloXR account before it can be used for real-time notifications. You can still change channel preference and delivery settings here any time.
         </p>
 
         <div v-if="user?.telegram_linked" class="profile-msg profile-msg--ok">

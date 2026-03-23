@@ -14,11 +14,15 @@ const form = reactive({
   business_name: "",
   business_type: "",
   phone_number: "",
+  email_notifications_enabled: true,
+  preferred_channel: "email",
   terms_accepted: false,
 })
 
 const loading = ref(false)
 const error = ref("")
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 const fieldErrors = reactive<Record<string, string>>({})
 
 const termsVersion = "placeholder-v1"
@@ -44,7 +48,10 @@ const signUp = async () => {
   loading.value = true
 
   try {
-    await $fetch(`${config.public.apiBase}/auth/register/`, {
+    const registration = await $fetch<{
+      telegram_link?: string
+      telegram_bot_user?: string
+    }>(`${config.public.apiBase}/auth/register/`, {
       method: "POST",
       body: {
         username: form.username,
@@ -53,6 +60,9 @@ const signUp = async () => {
         business_name: form.business_name,
         business_type: form.business_type,
         phone_number: form.phone_number,
+        email_notifications_enabled: form.email_notifications_enabled,
+        telegram_enabled: form.preferred_channel === "telegram",
+        preferred_channel: form.preferred_channel,
         terms_accepted: form.terms_accepted,
         terms_version: termsVersion,
       },
@@ -68,6 +78,16 @@ const signUp = async () => {
 
     useCookie("siloxr_token", { maxAge: 60 * 60 * 8 }).value = tokens.access
     useCookie("siloxr_refresh", { maxAge: 60 * 60 * 24 * 30 }).value = tokens.refresh
+
+    if (process.client && form.preferred_channel === "telegram" && registration?.telegram_link) {
+      sessionStorage.setItem("siloxr-telegram-link", JSON.stringify({
+        link: registration.telegram_link,
+        bot_user: registration.telegram_bot_user || "",
+      }))
+      await router.push("/auth/telegram-link")
+      return
+    }
+
     await router.push("/dashboard")
   } catch (e: any) {
     const data = e?.data ?? {}
@@ -169,29 +189,63 @@ useHead({ title: "Create account - SiloXR" })
       <div class="auth-grid">
         <div class="field">
           <label class="field__label">Password</label>
-          <input
-            v-model="form.password"
-            class="field__input"
-            type="password"
-            autocomplete="new-password"
-            placeholder="Create a secure password"
-            required
-          />
+          <div class="field__input-wrap">
+            <input
+              v-model="form.password"
+              class="field__input"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              placeholder="Create a secure password"
+              required
+            />
+            <button type="button" class="field__toggle" @click="showPassword = !showPassword">
+              {{ showPassword ? "Hide" : "Show" }}
+            </button>
+          </div>
           <span v-if="fieldErrors.password" class="field__error">{{ fieldErrors.password }}</span>
         </div>
 
         <div class="field">
           <label class="field__label">Confirm password</label>
-          <input
-            v-model="form.confirmPassword"
-            class="field__input"
-            type="password"
-            autocomplete="new-password"
-            placeholder="Repeat your password"
-            required
-          />
+          <div class="field__input-wrap">
+            <input
+              v-model="form.confirmPassword"
+              class="field__input"
+              :type="showConfirmPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              placeholder="Repeat your password"
+              required
+            />
+            <button type="button" class="field__toggle" @click="showConfirmPassword = !showConfirmPassword">
+              {{ showConfirmPassword ? "Hide" : "Show" }}
+            </button>
+          </div>
           <span v-if="fieldErrors.confirmPassword" class="field__error">{{ fieldErrors.confirmPassword }}</span>
         </div>
+      </div>
+
+      <div class="terms-box">
+        <p class="terms-box__title">Notification setup</p>
+        <p class="terms-box__copy">
+          Choose how SiloXR should reach you first. You can change this later in your profile.
+        </p>
+        <div class="notify-choice">
+          <label class="notify-option">
+            <input v-model="form.preferred_channel" type="radio" value="email" />
+            <span>Email first</span>
+          </label>
+          <label class="notify-option">
+            <input v-model="form.preferred_channel" type="radio" value="telegram" />
+            <span>Telegram first</span>
+          </label>
+        </div>
+        <label class="terms-check">
+          <input v-model="form.email_notifications_enabled" type="checkbox" />
+          <span>Send SiloXR updates to my email.</span>
+        </label>
+        <p v-if="form.preferred_channel === 'telegram'" class="terms-box__hint">
+          Telegram setup will continue immediately after signup so you do not have to repeat this step later.
+        </p>
       </div>
 
       <div class="terms-box">
@@ -243,6 +297,9 @@ useHead({ title: "Create account - SiloXR" })
   flex-direction: column;
   gap: 6px;
 }
+.field__input-wrap {
+  position: relative;
+}
 .field__label {
   font-size: 12px;
   font-weight: 600;
@@ -264,6 +321,18 @@ useHead({ title: "Create account - SiloXR" })
   outline: none;
   border-color: var(--purple);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--purple) 18%, transparent);
+}
+.field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .field__error {
   font-size: 12px;
@@ -295,6 +364,25 @@ useHead({ title: "Create account - SiloXR" })
 }
 .terms-box__link:hover {
   text-decoration: underline;
+}
+.terms-box__hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.notify-choice {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.notify-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
 }
 .terms-check {
   display: flex;

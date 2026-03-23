@@ -140,6 +140,9 @@ class NotificationRouter:
 
     def _should_telegram(self, user, decision) -> bool:
         """Send via Telegram if user has linked their account and it's enabled."""
+        preferred = getattr(user, "preferred_channel", "email")
+        if preferred != "telegram":
+            return False
         if not getattr(user, "telegram_enabled", False):
             return False
         try:
@@ -174,16 +177,19 @@ class NotificationRouter:
 
     def _should_email(self, user, decision, result: RoutingResult) -> bool:
         """
-        Send email if:
-          - Free user AND preferred_channel = email AND no telegram delivered
-          - Or Pro user AND email_notifications_enabled AND no other channel delivered
+        Send email if the user has email delivery enabled and either:
+          - email is the preferred channel
+          - telegram was preferred but is not currently linked/delivered
+          - Pro routing needs a fallback after no premium channel delivered
         """
         if not getattr(user, "email", "") or not getattr(user, "email_notifications_enabled", True):
             return False
         preferred = getattr(user, "preferred_channel", "email")
         if not user.is_pro:
-            # Free: only email if telegram not delivered and preference is email
-            return preferred == "email" and not result.telegram
+            if preferred == "email":
+                return True
+            return preferred == "telegram" and not result.telegram
         else:
-            # Pro: email as fallback if nothing else delivered
+            if preferred == "email":
+                return True
             return not result.telegram and not result.whatsapp

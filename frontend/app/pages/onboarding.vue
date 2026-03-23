@@ -14,6 +14,21 @@ const step   = ref(1)
 const saving = ref(false)
 const error  = ref("")
 
+const unitOptions = [
+  { value: "units", label: "Units" },
+  { value: "packs", label: "Packs" },
+  { value: "cartons", label: "Cartons" },
+  { value: "bottles", label: "Bottles" },
+  { value: "bags", label: "Bags" },
+  { value: "boxes", label: "Boxes" },
+  { value: "crates", label: "Crates" },
+  { value: "pairs", label: "Pairs" },
+  { value: "kg", label: "Kilograms (kg)" },
+  { value: "g", label: "Grams (g)" },
+  { value: "l", label: "Litres (L)" },
+  { value: "ml", label: "Millilitres (ml)" },
+]
+
 const product = reactive({
   name: "",
   sku: "",
@@ -24,6 +39,9 @@ const product = reactive({
 
 const stockCount     = ref<number | null>(null)
 const createdProduct = ref<Product | null>(null)
+const selectedUnitLabel = computed(
+  () => unitOptions.find((option) => option.value === product.unit)?.label ?? product.unit
+)
 
 // ── Helpers ─────────────────────────────────────────────────────────
 const resetError = () => (error.value = "")
@@ -194,8 +212,16 @@ const addAnother = () => {
           <div class="field-row">
             <div class="field">
               <label class="field__label">Unit of measure</label>
-              <input v-model="product.unit" class="field__input"
-                type="text" placeholder="units, kg, litres…" />
+              <select v-model="product.unit" class="field__input">
+                <option
+                  v-for="option in unitOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+              <span class="field__hint">Choose the unit you physically count for this product.</span>
             </div>
           </div>
           <div class="field-row">
@@ -228,7 +254,7 @@ const addAnother = () => {
         <form class="onboard-form" @submit.prevent="saveStockCount">
           <div class="field">
             <label class="field__label">
-              Current quantity ({{ product.unit }})
+              Current quantity ({{ selectedUnitLabel }})
             </label>
             <input v-model.number="stockCount" class="field__input field__input--lg"
               type="number" min="0" required placeholder="0" />
@@ -287,6 +313,7 @@ const addAnother = () => {
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .field{display:flex;flex-direction:column;gap:5px}
 .field__label{font-size:12px;font-weight:600;color:var(--color-text-muted)}
+.field__hint{font-size:12px;color:var(--color-text-hint);line-height:1.45}
 .field__input{padding:10px 14px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text);font-size:14px;font-family:var(--font-sans);width:100%;transition:border-color .15s}
 .field__input:focus{outline:none;border-color:var(--color-purple)}
 .field__input--lg{font-size:28px;font-weight:700;text-align:center;padding:16px}

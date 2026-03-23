@@ -1131,6 +1131,9 @@ def register(request):
     business_type = request.data.get("business_type", "").strip().lower()
     business_name = request.data.get("business_name", "").strip()
     phone_number = request.data.get("phone_number", "").strip()
+    email_notifications_enabled = bool(request.data.get("email_notifications_enabled", True))
+    telegram_requested = bool(request.data.get("telegram_enabled", False))
+    preferred_channel = (request.data.get("preferred_channel", User.CHANNEL_EMAIL) or User.CHANNEL_EMAIL).strip().lower()
     terms_accepted = bool(request.data.get("terms_accepted", False))
     terms_version = request.data.get("terms_version", "placeholder-v1").strip() or "placeholder-v1"
 
@@ -1149,6 +1152,8 @@ def register(request):
             {"terms_accepted": ["You must accept the terms and conditions to continue."]},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if preferred_channel not in {User.CHANNEL_EMAIL, User.CHANNEL_TELEGRAM}:
+        preferred_channel = User.CHANNEL_EMAIL
 
     if User.objects.filter(username=username).exists():
         return Response(
@@ -1177,9 +1182,51 @@ def register(request):
         business_type=business_type,
         business_name=business_name,
         phone_number=phone_number or None,
+        email_notifications_enabled=email_notifications_enabled,
+        telegram_enabled=False,
+        preferred_channel=preferred_channel,
         terms_accepted_at=timezone.now(),
         terms_version=terms_version,
     )
+
+    telegram_link = ""
+    telegram_bot_user = ""
+    if telegram_requested or preferred_channel == User.CHANNEL_TELEGRAM:
+        try:
+            from apps.notifications.telegram import generate_link_token
+            from django.conf import settings as djsettings
+
+            token = generate_link_token(user)
+            telegram_bot_user = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot")
+            telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
+        except Exception as exc:
+            logger.error("Telegram signup link generation failed for %s: %s", user.username, exc, exc_info=True)
+
+    try:
+        from django.conf import settings as djsettings
+        from django.core.mail import send_mail
+
+        if user.email:
+            next_step = (
+                "Telegram was selected as your preferred channel. We will open your Telegram linking step immediately after signup."
+                if preferred_channel == User.CHANNEL_TELEGRAM else
+                "Email updates are enabled for your account, so important SiloXR updates can reach you here."
+            )
+            send_mail(
+                subject="Welcome to SiloXR",
+                message=(
+                    f"Hi {user.username},\n\n"
+                    f"Welcome to SiloXR.\n\n"
+                    f"Your account has been created successfully.\n"
+                    f"{next_step}\n\n"
+                    f"If you need help, reply to {djsettings.DEFAULT_FROM_EMAIL}."
+                ),
+                from_email=djsettings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+    except Exception as exc:
+        logger.error("Welcome email failed for %s: %s", user.email, exc, exc_info=True)
 
     return Response(
         {
@@ -1187,6 +1234,9 @@ def register(request):
             "username": user.username,
             "tier": user.tier,
             "business_type": user.business_type,
+            "preferred_channel": user.preferred_channel,
+            "telegram_link": telegram_link,
+            "telegram_bot_user": telegram_bot_user,
         },
         status=status.HTTP_201_CREATED,
     )
