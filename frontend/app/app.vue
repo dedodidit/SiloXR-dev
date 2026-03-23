@@ -131,10 +131,7 @@ useHead(() => ({
       <!-- Brand -->
       <NuxtLink to="/dashboard" class="app-header__brand">
         <div class="app-header__brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 12 12" fill="none" width="14" height="14">
-            <path d="M2 9L6 3L10 9H2Z" fill="white" opacity="0.95"/>
-            <path d="M4 9L6 6L8 9H4Z" fill="white" opacity="0.5"/>
-          </svg>
+          <img src="/logo-mark.svg" alt="" />
         </div>
         <div class="app-header__brand-text">
           <span class="app-header__brand-name">SiloXR</span>

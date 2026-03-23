@@ -146,10 +146,7 @@ useHead({
       <div class="landing__nav-inner">
         <div class="landing__brand">
           <div class="landing__brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 12 12" fill="none" width="12" height="12">
-              <path d="M2 9L6 3L10 9H2Z" fill="white" opacity=".9"/>
-              <path d="M4 9L6 6L8 9H4Z" fill="white" opacity=".5"/>
-            </svg>
+            <img src="/logo-mark.svg" alt="" />
           </div>
           SiloXR
         </div>
@@ -386,10 +383,14 @@ useHead({
   width:         22px;
   height:        22px;
   border-radius: 6px;
-  background:    linear-gradient(135deg, var(--purple), var(--purple-2));
   display:       flex;
   align-items:   center;
   justify-content: center;
+}
+.landing__brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .landing__nav-links {
   display:     flex;
