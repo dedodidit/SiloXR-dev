@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from django.urls import reverse
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -241,6 +242,28 @@ class TestBusinessHealthEndpoints(APITestBase):
         self.assertEqual(resp.data["summary"]["estimated_weekly_revenue"], 10500.0)
         self.assertGreaterEqual(resp.data["summary"]["potential_revenue_gap_weekly"], 0.0)
         self.assertEqual(resp.data["top_products"][0]["name"], "Coca-Cola 50cl PET")
+
+
+class TestTelegramLinkEndpoint(APITestBase):
+
+    @override_settings(TELEGRAM_BOT_USERNAME=12345)
+    def test_telegram_link_handles_non_string_bot_username(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/telegram/link/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["bot_user"], "12345")
+        self.assertIn("https://t.me/12345?start=", resp.data["link"])
+
+    @override_settings(TELEGRAM_BOT_USERNAME=None)
+    def test_telegram_link_returns_503_when_bot_username_missing(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/telegram/link/")
+
+        self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(resp.data["detail"], "Telegram linking is not configured yet.")
 
 
 class TestOfflineSync(APITestBase):

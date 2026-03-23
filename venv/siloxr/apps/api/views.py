@@ -43,6 +43,24 @@ from apps.core.statistics import compute_cv, expected_shortage, get_distribution
 logger = logging.getLogger(__name__)
 
 
+def _get_telegram_bot_username() -> str:
+    """
+    Return a normalized Telegram bot username from settings.
+
+    This is intentionally defensive because misconfigured env values should
+    degrade Telegram linking gracefully instead of crashing authenticated
+    requests with a raw 500.
+    """
+    from django.conf import settings as djsettings
+
+    raw_value = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "")
+    if raw_value is None:
+        return ""
+
+    bot_user = str(raw_value).strip().lstrip("@")
+    return bot_user
+
+
 def _maybe_send_automated_product_update_reminder(user) -> None:
     """
     Opportunistically trigger stale-product reminders during normal usage,
@@ -1228,10 +1246,9 @@ def register(request):
     if telegram_requested or preferred_channel == User.CHANNEL_TELEGRAM:
         try:
             from apps.notifications.telegram import generate_link_token
-            from django.conf import settings as djsettings
 
             token = generate_link_token(user)
-            telegram_bot_user = (getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot") or "siloxr_bot").strip().lstrip("@")
+            telegram_bot_user = _get_telegram_bot_username() or "siloxr_bot"
             telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
         except Exception as exc:
             logger.error("Telegram signup link generation failed for %s: %s", user.username, exc, exc_info=True)
@@ -2013,10 +2030,7 @@ def telegram_link_token(request):
     Generates a token the user sends to the bot to link their account.
     Returns the bot username and the deep link URL.
     """
-    from apps.notifications.telegram import generate_link_token
-    from django.conf import settings as djsettings
-
-    bot_user = (getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot") or "siloxr_bot").strip().lstrip("@")
+    bot_user = _get_telegram_bot_username()
     if not bot_user:
         return Response(
             {"detail": "Telegram linking is not configured yet."},
@@ -2024,6 +2038,8 @@ def telegram_link_token(request):
         )
 
     try:
+        from apps.notifications.telegram import generate_link_token
+
         token = generate_link_token(request.user)
     except Exception as exc:
         logger.error("Telegram link generation failed for %s: %s", request.user.username, exc, exc_info=True)
