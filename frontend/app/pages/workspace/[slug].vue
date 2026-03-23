@@ -307,14 +307,139 @@ const handleDeleteProduct = async (product: any) => {
 
 const workspaceTitle = computed(() => section.value?.title ?? "Workspace")
 const workspaceHint = computed(() => section.value?.helper ?? "")
+const productVelocityRows = computed(() =>
+  inventoryStore.products.map((product) => {
+    const daysRemaining = Number(product.days_remaining ?? 0)
+    const estimatedQuantity = Number(product.estimated_quantity ?? 0)
+    const burnRate = Number(product.burn_rate?.rate_per_day ?? 0)
+    const estimatedDailyUnits =
+      burnRate > 0
+        ? burnRate
+        : daysRemaining > 0 && estimatedQuantity > 0
+        ? estimatedQuantity / Math.max(daysRemaining, 0.5)
+        : 0
+    const weeklyRevenue = Number(product.selling_price ?? 0) * estimatedDailyUnits * 7
+
+    return {
+      name: product.name,
+      category: product.category,
+      estimatedDailyUnits,
+      weeklyRevenue,
+      confidence: Number(product.confidence_score ?? 0),
+      daysRemaining,
+      quantityGap: Number(product.quantity_gap ?? 0),
+    }
+  })
+)
+const fallbackBusinessHealthTopProducts = computed(() =>
+  productVelocityRows.value
+    .filter((item) => item.weeklyRevenue > 0)
+    .sort((a, b) => b.weeklyRevenue - a.weeklyRevenue)
+    .slice(0, 5)
+    .map((item) => ({
+      name: item.name,
+      estimated_weekly_revenue: Math.round(item.weeklyRevenue),
+    }))
+)
+const fallbackBusinessHealthDemandGaps = computed(() =>
+  demandDeficits.value.map((gap: any) => ({
+    name: gap.product_name,
+    expected_weekly_demand: Number(gap.expected_daily_demand ?? 0) * 7,
+    observed_weekly_demand: Number(gap.observed_daily_demand ?? 0) * 7,
+    gap_units: Number(gap.demand_gap ?? 0) * 7,
+    gap_revenue: Number(gap.revenue_risk_weekly ?? 0),
+    confidence: Number(gap.confidence ?? summary.value?.avg_confidence ?? 0),
+  }))
+)
 const businessHealthSummary = computed(() => businessHealthReport.value?.summary ?? null)
-const businessHealthTopProducts = computed(() => businessHealthReport.value?.top_products ?? [])
-const businessHealthDemandGaps = computed(() => businessHealthReport.value?.demand_gaps ?? [])
-const businessHealthInsights = computed(() => businessHealthReport.value?.insights ?? [])
-const investorSummary = computed(() => businessHealthReport.value?.investor_summary ?? "")
+const businessHealthTopProducts = computed(() =>
+  businessHealthReport.value?.top_products?.length
+    ? businessHealthReport.value.top_products
+    : fallbackBusinessHealthTopProducts.value
+)
+const businessHealthDemandGaps = computed(() =>
+  businessHealthReport.value?.demand_gaps?.length
+    ? businessHealthReport.value.demand_gaps
+    : fallbackBusinessHealthDemandGaps.value
+)
+const analyticsWeeklyRevenue = computed(() => {
+  const reportValue = Number(businessHealthSummary.value?.estimated_weekly_revenue ?? 0)
+  if (reportValue > 0) return reportValue
+  return productVelocityRows.value.reduce((sum, item) => sum + item.weeklyRevenue, 0)
+})
+const analyticsMonthlyRevenue = computed(() => analyticsWeeklyRevenue.value * 4)
+const analyticsGapWeekly = computed(() => {
+  const reportValue = Number(businessHealthSummary.value?.potential_revenue_gap_weekly ?? 0)
+  if (reportValue > 0) return reportValue
+  return businessHealthDemandGaps.value.reduce((sum, item) => sum + Number(item.gap_revenue ?? 0), 0)
+})
+const analyticsConfidence = computed(() => {
+  const reportValue = Number(businessHealthSummary.value?.confidence_score ?? 0)
+  if (reportValue > 0) return reportValue
+  return Number(portfolioSummary.value?.confidence_score ?? summary.value?.avg_confidence ?? 0)
+})
+const businessHealthInsights = computed(() => {
+  if (businessHealthReport.value?.insights?.length) return businessHealthReport.value.insights
+
+  const insights: string[] = []
+  if (analyticsGapWeekly.value > 0 && businessHealthDemandGaps.value.length) {
+    insights.push(
+      `${businessHealthDemandGaps.value.length} visible demand gap${businessHealthDemandGaps.value.length === 1 ? "" : "s"} could be costing about ${formatNaira(analyticsGapWeekly.value)} per week.`
+    )
+  }
+  if (businessHealthTopProducts.value.length) {
+    const names = businessHealthTopProducts.value.slice(0, 3).map((item: any) => item.name).join(", ")
+    insights.push(`Current revenue concentration sits in ${names}.`)
+  }
+  if (Number(summary.value?.stale_products_count ?? 0) > 0) {
+    insights.push(
+      `${summary.value?.stale_products_count} product${Number(summary.value?.stale_products_count ?? 0) === 1 ? "" : "s"} need fresh verification, which is weakening the confidence of this view.`
+    )
+  }
+  if (Number(summary.value?.products_needing_action ?? 0) > 0) {
+    insights.push(
+      `${summary.value?.products_needing_action} tracked product${Number(summary.value?.products_needing_action ?? 0) === 1 ? "" : "s"} currently need action to protect commercial performance.`
+    )
+  }
+  if (!insights.length) {
+    insights.push("SiloXR is using your live product, stock, and demand signals to build a stronger business intelligence layer here.")
+  }
+  return insights.slice(0, 5)
+})
+const investorSummary = computed(() => {
+  if (businessHealthReport.value?.investor_summary) return businessHealthReport.value.investor_summary
+
+  const driverNames = businessHealthTopProducts.value.slice(0, 3).map((item: any) => item.name).join(", ") || "current tracked products"
+  if (analyticsWeeklyRevenue.value <= 0) {
+    return "This business health view is ready, but it needs more live inventory and sales activity before monthly revenue can be estimated with confidence."
+  }
+  const gapClause = analyticsGapWeekly.value > 0
+    ? `Current analysis suggests about ${formatNaira(analyticsGapWeekly.value)} per week may still be leaking through unmet demand.`
+    : "Current analysis does not show a material weekly revenue leakage from unmet demand."
+  return `This business is currently processing about ${formatNaira(analyticsMonthlyRevenue.value)} per month, with key revenue drivers in ${driverNames}. ${gapClause} The confidence level on this operating view is ${Math.round(analyticsConfidence.value * 100)}%.`
+})
+const healthPillars = computed(() => [
+  {
+    title: "Coverage health",
+    value: Number(summary.value?.stockouts_within_7d ?? 0),
+    label: "products projected to stock out soon",
+    tone: Number(summary.value?.stockouts_within_7d ?? 0) > 0 ? "danger" : "safe",
+  },
+  {
+    title: "Verification debt",
+    value: Number(summary.value?.stale_products_count ?? 0),
+    label: "products need a fresh stock count",
+    tone: Number(summary.value?.stale_products_count ?? 0) > 0 ? "warning" : "safe",
+  },
+  {
+    title: "Decision pressure",
+    value: Number(summary.value?.products_needing_action ?? 0),
+    label: "products currently need action",
+    tone: Number(summary.value?.products_needing_action ?? 0) > 0 ? "danger" : "safe",
+  },
+])
 const businessHealthPrimaryTitle = computed(() => {
-  if (!businessHealthSummary.value) return "Business health report is getting ready"
-  const monthlyRevenue = Number(businessHealthSummary.value.estimated_monthly_revenue ?? 0)
+  const monthlyRevenue = analyticsMonthlyRevenue.value
   if (monthlyRevenue <= 0) return "More live operating data will sharpen the business story"
   return `Estimated monthly revenue is ${formatNaira(monthlyRevenue)}`
 })
@@ -323,11 +448,15 @@ const businessHealthHeroCopy = computed(() => {
   return "This workspace turns live inventory and demand signals into a clean commercial summary you can review, export, and share."
 })
 const businessHealthGapCoverage = computed(() => {
-  const weeklyRevenue = Number(businessHealthSummary.value?.estimated_weekly_revenue ?? 0)
-  const weeklyGap = Number(businessHealthSummary.value?.potential_revenue_gap_weekly ?? 0)
+  const weeklyRevenue = analyticsWeeklyRevenue.value
+  const weeklyGap = analyticsGapWeekly.value
   if (weeklyRevenue <= 0 || weeklyGap <= 0) return null
   return Math.round((weeklyGap / weeklyRevenue) * 100)
 })
+
+function formatNaira(value: number) {
+  return `₦${Math.round(Number(value || 0)).toLocaleString()}`
+}
 
 const loadPortfolioSummarySafe = async () => {
   try {
@@ -592,6 +721,179 @@ watch(dashboardRefreshTick, async () => {
       </template>
 
       <template v-else-if="resolvedSlug === 'business-health'">
+        <div class="workspace__hero surface workspace__hero--health">
+          <p class="workspace__hero-eyebrow">Business intelligence layer</p>
+          <h2 class="workspace__hero-amount">{{ businessHealthPrimaryTitle }}</h2>
+          <p class="workspace__hero-copy">{{ businessHealthHeroCopy }}</p>
+        </div>
+
+        <div class="workspace__grid workspace__grid--health-metrics">
+          <div class="workspace__metric-card surface">
+            <p class="workspace__panel-eyebrow">Weekly revenue</p>
+            <h3 class="workspace__metric-value">{{ formatNaira(analyticsWeeklyRevenue) }}</h3>
+            <p class="workspace__panel-copy">Observed weekly revenue generated from your live product movement and inferred demand.</p>
+          </div>
+
+          <div class="workspace__metric-card surface">
+            <p class="workspace__panel-eyebrow">Revenue gap</p>
+            <h3 class="workspace__metric-value workspace__metric-value--danger">{{ formatNaira(analyticsGapWeekly) }}</h3>
+            <p class="workspace__panel-copy">
+              {{
+                businessHealthGapCoverage != null
+                  ? `Closing visible gaps could add about ${businessHealthGapCoverage}% on top of current weekly revenue.`
+                  : "No material weekly revenue leakage is currently visible from unmet demand."
+              }}
+            </p>
+          </div>
+
+          <div class="workspace__metric-card surface">
+            <p class="workspace__panel-eyebrow">Confidence</p>
+            <h3 class="workspace__metric-value">{{ Math.round(analyticsConfidence * 100) }}%</h3>
+            <p class="workspace__panel-copy">Weighted by commercial importance so higher-value lines influence the report proportionally.</p>
+          </div>
+        </div>
+
+        <div class="workspace__grid workspace__grid--health">
+          <div class="workspace__support surface">
+            <p class="workspace__panel-eyebrow">Health pillars</p>
+            <h3 class="workspace__panel-title">Three operating signals shaping overall business health right now.</h3>
+            <div class="workspace__pillar-list">
+              <div
+                v-for="pillar in healthPillars"
+                :key="pillar.title"
+                class="workspace__pillar"
+                :class="{
+                  'workspace__pillar--danger': pillar.tone === 'danger',
+                  'workspace__pillar--warning': pillar.tone === 'warning',
+                  'workspace__pillar--safe': pillar.tone === 'safe',
+                }"
+              >
+                <span class="workspace__pillar-title">{{ pillar.title }}</span>
+                <strong class="workspace__pillar-value">{{ pillar.value }}</strong>
+                <span class="workspace__pillar-copy">{{ pillar.label }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="workspace__support surface">
+            <p class="workspace__panel-eyebrow">Top revenue drivers</p>
+            <h3 class="workspace__panel-title">Products currently carrying the largest weekly revenue contribution.</h3>
+            <div v-if="businessHealthTopProducts.length" class="workspace__rank-list">
+              <div
+                v-for="(product, index) in businessHealthTopProducts"
+                :key="`${product.name}-${index}`"
+                class="workspace__rank-item"
+              >
+                <div class="workspace__rank-copy">
+                  <span class="workspace__rank-badge">{{ index + 1 }}</span>
+                  <div>
+                    <p class="workspace__rank-title">{{ product.name }}</p>
+                    <p class="workspace__rank-sub">Estimated weekly revenue contribution</p>
+                  </div>
+                </div>
+                <strong class="workspace__rank-value">{{ formatNaira(Number(product.estimated_weekly_revenue ?? 0)) }}</strong>
+              </div>
+            </div>
+            <div v-else class="workspace__starter-list">
+              <button v-if="selectedProduct" type="button" class="workspace__starter" @click="recordStarterSale">
+                <span class="workspace__starter-tag">Capture revenue</span>
+                <strong>Record a live sale</strong>
+                <span>That immediately gives this dashboard a commercial signal to rank.</span>
+              </button>
+              <NuxtLink to="/onboarding" class="workspace__starter">
+                <span class="workspace__starter-tag">Expand coverage</span>
+                <strong>Add more tracked products</strong>
+                <span>Business health gets stronger as more revenue lines are represented.</span>
+              </NuxtLink>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace__grid workspace__grid--health">
+          <div class="workspace__support surface">
+            <p class="workspace__panel-eyebrow">Demand gap breakdown</p>
+            <h3 class="workspace__panel-title">Where expected weekly demand is still ahead of observed demand.</h3>
+            <div v-if="businessHealthDemandGaps.length" class="workspace__health-gap-list">
+              <div
+                v-for="gap in businessHealthDemandGaps"
+                :key="gap.name"
+                class="workspace__health-gap-item"
+              >
+                <div>
+                  <p class="workspace__demand-name">{{ gap.name }}</p>
+                  <p class="workspace__demand-sub">
+                    Expected {{ Math.round(Number(gap.expected_weekly_demand ?? 0)) }}/week
+                    - observed {{ Math.round(Number(gap.observed_weekly_demand ?? 0)) }}/week
+                    - confidence {{ Math.round(Number(gap.confidence ?? 0) * 100) }}%
+                  </p>
+                </div>
+                <div class="workspace__health-gap-metrics">
+                  <strong>{{ formatNaira(Number(gap.gap_revenue ?? 0)) }}/week</strong>
+                  <span>{{ Math.round(Number(gap.gap_units ?? 0)) }} units gap</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="workspace__starter-list">
+              <button v-if="selectedProduct" type="button" class="workspace__starter" @click="verifyStarterStock">
+                <span class="workspace__starter-tag">Strengthen signal</span>
+                <strong>Verify stock for {{ selectedProduct.name }}</strong>
+                <span>A fresh count makes the business health layer more reliable immediately.</span>
+              </button>
+              <button v-if="selectedProduct" type="button" class="workspace__starter" @click="recordStarterSale">
+                <span class="workspace__starter-tag">Capture demand</span>
+                <strong>Record a live sale</strong>
+                <span>That gives the analytics layer a stronger demand baseline to compare against.</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="workspace__support surface">
+            <p class="workspace__panel-eyebrow">Report insights</p>
+            <h3 class="workspace__panel-title">Operational takeaways translated into business language.</h3>
+            <div class="workspace__insight-list">
+              <div
+                v-for="(insight, index) in businessHealthInsights"
+                :key="`${index}-${insight}`"
+                class="workspace__insight-item"
+              >
+                <span class="workspace__insight-index">{{ index + 1 }}</span>
+                <p>{{ insight }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace__grid workspace__grid--health">
+          <div class="workspace__support surface workspace__support--investor">
+            <p class="workspace__panel-eyebrow">Investor summary</p>
+            <h3 class="workspace__panel-title">A clean narrative that can feed monthly reports and partner views.</h3>
+            <p class="workspace__investor-summary">{{ investorSummary }}</p>
+            <div class="workspace__investor-tags">
+              <span class="workspace__tag">Dashboard-ready</span>
+              <span class="workspace__tag">PDF-ready</span>
+              <span class="workspace__tag">Partner-ready</span>
+            </div>
+          </div>
+
+          <div>
+            <TopProductsChart
+              v-if="productVelocityRows.filter(item => item.estimatedDailyUnits > 0).length"
+              :items="productVelocityRows.filter(item => item.estimatedDailyUnits > 0).slice(0, 7).map(item => ({
+                name: item.name,
+                value: item.estimatedDailyUnits,
+                subtitle: item.category || 'tracked line',
+              }))"
+            />
+            <div v-else class="workspace__support surface">
+              <p class="workspace__panel-eyebrow">Readiness</p>
+              <h3 class="workspace__panel-title">The analytics layer is ready for more live operating input.</h3>
+              <p class="workspace__panel-copy">Add products, verify stock, and record sales to unlock richer rankings, stronger investor narratives, and monthly report quality.</p>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="resolvedSlug === 'business-health' && false">
         <div class="workspace__hero surface workspace__hero--health">
           <p class="workspace__hero-eyebrow">Investor-ready report</p>
           <h2 class="workspace__hero-amount">{{ businessHealthPrimaryTitle }}</h2>
@@ -884,6 +1186,49 @@ watch(dashboardRefreshTick, async () => {
 .workspace__metric-value--danger {
   color: var(--danger, #b42318);
 }
+.workspace__pillar-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.workspace__pillar {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+}
+.workspace__pillar--danger {
+  border-color: color-mix(in srgb, var(--danger, #b42318) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger, #b42318) 8%, var(--bg-card));
+}
+.workspace__pillar--warning {
+  border-color: color-mix(in srgb, #d98a00 24%, var(--border-subtle));
+  background: color-mix(in srgb, #d98a00 8%, var(--bg-card));
+}
+.workspace__pillar--safe {
+  border-color: color-mix(in srgb, var(--success, #1f8f6a) 22%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success, #1f8f6a) 8%, var(--bg-card));
+}
+.workspace__pillar-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.workspace__pillar-value {
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+.workspace__pillar-copy {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
 .workspace__panel-title {
   font-size: 18px;
   line-height: 1.25;
@@ -1117,6 +1462,9 @@ watch(dashboardRefreshTick, async () => {
   .workspace__grid--demand,
   .workspace__grid--health,
   .workspace__grid--health-metrics {
+    grid-template-columns: 1fr;
+  }
+  .workspace__pillar-list {
     grid-template-columns: 1fr;
   }
 }
