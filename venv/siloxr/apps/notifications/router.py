@@ -37,13 +37,6 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Minimum confidence for WhatsApp delivery
-WHATSAPP_CONF_FLOOR = 0.70
-
-# WhatsApp throttle settings
-WHATSAPP_COOLDOWN_HOURS = 6
-WHATSAPP_MAX_PER_DAY    = 1
-
 REMINDER_THROTTLE_CHANNEL = "upd_reminder"
 
 
@@ -76,11 +69,8 @@ class NotificationRouter:
         Route a DecisionLog to all appropriate channels.
         Returns RoutingResult with delivery status per channel.
         """
-        from apps.notifications.dispatch import (
-            _build_title, _build_body, _build_email_html,
-            _send_email, _send_whatsapp,
-        )
-        from apps.notifications.models import Notification, NotificationThrottle
+        from apps.notifications.dispatch import _build_title, _build_body, _send_email
+        from apps.notifications.models import Notification
 
         user   = product.owner
         result = RoutingResult()
@@ -112,21 +102,10 @@ class NotificationRouter:
                 logger.error("Telegram routing error: %s", exc, exc_info=True)
                 result.skipped.append("telegram")
 
-        # ── 3. WhatsApp (pro only, confidence gated, throttled) ──────────
-        if self._should_whatsapp(user, decision, product):
-            try:
-                _send_whatsapp(user, decision, title, body)
-                NotificationThrottle.record(user, product, "whatsapp")
-                result.whatsapp = True
-                logger.info("WhatsApp delivered for %s → %s", user.username, decision.action)
-            except Exception as exc:
-                logger.error("WhatsApp routing error: %s", exc, exc_info=True)
-                result.skipped.append("whatsapp")
-
-        # ── 4. Email (free fallback or pro supplement) ───────────────────
+        # WhatsApp is temporarily disabled.
+        # ── 3. Email (fallback or primary channel) ───────────────────────
         if self._should_email(user, decision, result):
             try:
-                html = _build_email_html(decision, title, body)
                 _send_email(user, decision, title, body)
                 result.email = True
             except Exception as exc:
@@ -145,7 +124,7 @@ class NotificationRouter:
         Route a non-decision insight through the user's active notification
         preferences while always keeping an in-app record.
         """
-        from apps.notifications.dispatch import _send_email_message
+        from apps.notifications.dispatch import _build_insight_email_html, _dashboard_url, _send_email_message
         from apps.notifications.models import Notification
         from apps.notifications.telegram import send_insight
 
@@ -187,10 +166,132 @@ class NotificationRouter:
         if self._should_email(user, None, result):
             try:
                 email_body = f"{title}\n\n{body}"
-                _send_email_message(user, title[:255], email_body)
+                dashboard_url = _dashboard_url("/dashboard")
+                if dashboard_url:
+                    email_body = f"{email_body}\n\nOpen dashboard: {dashboard_url}"
+                html = _build_insight_email_html(user, title[:255], body, "/dashboard")
+                _send_email_message(user, title[:255], email_body, html)
                 result.email = True
             except Exception as exc:
                 logger.error("Email insight routing error: %s", exc, exc_info=True)
+                result.skipped.append("email")
+
+        return result
+
+    def route_dashboard_insight(self, user, insight) -> RoutingResult:
+        """
+        Route dashboard-derived insights that are not tied to a single product.
+        """
+        from apps.notifications.dispatch import _build_insight_email_html, _dashboard_url, _send_email_message
+        from apps.notifications.models import Notification
+        from apps.notifications.telegram import send_insight
+
+        result = RoutingResult()
+        title = (insight or {}).get("title", "") or "Dashboard insight"
+        body = (insight or {}).get("body", "") or (insight or {}).get("message", "")
+        confidence = float((insight or {}).get("confidence", 0.55) or 0.55)
+        dashboard_path = (insight or {}).get("dashboard_path", "/dashboard")
+
+        if not body:
+            return result
+
+        Notification.objects.create(
+            user=user,
+            channel=Notification.CHANNEL_IN_APP,
+            title=title[:255],
+            body=body,
+            confidence=confidence,
+        )
+        result.in_app = True
+
+        if self._should_telegram(user, None):
+            try:
+                profile = user.telegram_profile
+                if send_insight(
+                    profile.chat_id,
+                    {
+                        "title": title,
+                        "reasoning": body,
+                        "confidence": confidence,
+                        "product_name": "",
+                        "date_signal": "",
+                    },
+                ):
+                    result.telegram = True
+            except Exception as exc:
+                logger.error("Telegram dashboard insight routing error: %s", exc, exc_info=True)
+                result.skipped.append("telegram")
+
+        if self._should_email(user, None, result):
+            try:
+                email_body = f"{title}\n\n{body}"
+                dashboard_url = _dashboard_url(dashboard_path)
+                if dashboard_url:
+                    email_body = f"{email_body}\n\nOpen dashboard: {dashboard_url}"
+                html = _build_insight_email_html(user, title[:255], body, dashboard_path)
+                _send_email_message(user, title[:255], email_body, html)
+                result.email = True
+            except Exception as exc:
+                logger.error("Email dashboard insight routing error: %s", exc, exc_info=True)
+                result.skipped.append("email")
+
+        return result
+
+    def route_dashboard_brief(self, user, insight) -> RoutingResult:
+        """
+        Route a grouped start/end-of-business dashboard brief.
+        """
+        from apps.notifications.dispatch import _dashboard_url, _send_email_message
+        from apps.notifications.models import Notification
+        from apps.notifications.telegram import send_insight
+
+        result = RoutingResult()
+        title = (insight or {}).get("title", "") or "Business brief"
+        body = (insight or {}).get("body", "") or ""
+        html = (insight or {}).get("html")
+        confidence = float((insight or {}).get("confidence", 0.62) or 0.62)
+        dashboard_path = (insight or {}).get("dashboard_path", "/dashboard")
+
+        if not body:
+            return result
+
+        Notification.objects.create(
+            user=user,
+            channel=Notification.CHANNEL_IN_APP,
+            title=title[:255],
+            body=body,
+            confidence=confidence,
+        )
+        result.in_app = True
+
+        if self._should_telegram(user, None):
+            try:
+                profile = user.telegram_profile
+                if send_insight(
+                    profile.chat_id,
+                    {
+                        "title": title,
+                        "reasoning": body,
+                        "confidence": confidence,
+                        "product_name": "",
+                        "date_signal": "",
+                    },
+                ):
+                    result.telegram = True
+            except Exception as exc:
+                logger.error("Telegram dashboard brief routing error: %s", exc, exc_info=True)
+                result.skipped.append("telegram")
+
+        if self._should_email(user, None, result):
+            try:
+                email_body = body
+                dashboard_url = _dashboard_url(dashboard_path)
+                if dashboard_url and dashboard_url not in email_body:
+                    email_body = f"{email_body}\n\nOpen dashboard: {dashboard_url}"
+                _send_email_message(user, title[:255], email_body, html)
+                result.email = True
+            except Exception as exc:
+                logger.error("Email dashboard brief routing error: %s", exc, exc_info=True)
                 result.skipped.append("email")
 
         return result
@@ -206,7 +307,6 @@ class NotificationRouter:
             _build_product_update_email_html,
             _build_product_update_title,
             _send_email_message,
-            _send_whatsapp_message,
         )
         from apps.notifications.models import Notification, NotificationThrottle
         from apps.notifications.telegram import send_product_update_reminder
@@ -248,14 +348,6 @@ class NotificationRouter:
             except Exception as exc:
                 logger.error("Telegram reminder routing error: %s", exc, exc_info=True)
                 result.skipped.append("telegram")
-        elif preferred == "whatsapp" and self._should_whatsapp_reminder(user):
-            try:
-                if _send_whatsapp_message(user, title, body):
-                    result.whatsapp = True
-            except Exception as exc:
-                logger.error("WhatsApp reminder routing error: %s", exc, exc_info=True)
-                result.skipped.append("whatsapp")
-
         if self._should_email(user, None, result):
             try:
                 if _send_email_message(user, title[:255], body, html):
@@ -282,38 +374,6 @@ class NotificationRouter:
         except Exception:
             return False
 
-    def _should_whatsapp_reminder(self, user) -> bool:
-        """WhatsApp reminder delivery for users who explicitly prefer the channel."""
-        return bool(
-            getattr(user, "is_pro", False)
-            and getattr(user, "phone_number", "")
-            and getattr(user, "whatsapp_enabled", False)
-        )
-
-    def _should_whatsapp(self, user, decision, product) -> bool:
-        """WhatsApp: Pro only, confidence gated, severity gated, throttled."""
-        if not user.is_pro:
-            return False
-        if not getattr(user, "phone_number", "") or not getattr(user, "whatsapp_enabled", False):
-            return False
-        if decision.confidence_score < WHATSAPP_CONF_FLOOR:
-            return False
-        if decision.severity not in ("critical", "warning"):
-            return False
-        # "Critical only" mode
-        if getattr(user, "whatsapp_critical_only", False):
-            if decision.action != "ALERT_CRITICAL":
-                return False
-        # Throttle check
-        from apps.notifications.models import NotificationThrottle
-        throttle = NotificationThrottle.objects.filter(
-            user=user, product=product, channel="whatsapp"
-        ).first()
-        if throttle and throttle.is_throttled(WHATSAPP_COOLDOWN_HOURS, WHATSAPP_MAX_PER_DAY):
-            logger.debug("WhatsApp throttled for %s/%s", user.username, product.sku)
-            return False
-        return True
-
     def _should_email(self, user, decision, result: RoutingResult) -> bool:
         """
         Send email if the user has email delivery enabled and either:
@@ -324,6 +384,8 @@ class NotificationRouter:
         if not getattr(user, "email", "") or not getattr(user, "email_notifications_enabled", True):
             return False
         preferred = getattr(user, "preferred_channel", "email")
+        if preferred == "whatsapp":
+            preferred = "email"
         if not user.is_pro:
             if preferred == "email":
                 return True
@@ -331,4 +393,4 @@ class NotificationRouter:
         else:
             if preferred == "email":
                 return True
-            return not result.telegram and not result.whatsapp
+            return not result.telegram

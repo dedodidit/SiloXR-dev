@@ -42,6 +42,23 @@ from apps.core.statistics import compute_cv, expected_shortage, get_distribution
 logger = logging.getLogger(__name__)
 
 
+def _maybe_send_automated_product_update_reminder(user) -> None:
+    """
+    Opportunistically trigger stale-product reminders during normal usage,
+    without relying on an external scheduler.
+    """
+    try:
+        from apps.notifications.reminders import maybe_send_automated_product_update_reminder
+
+        maybe_send_automated_product_update_reminder(user)
+    except Exception as exc:
+        logger.warning(
+            "Automated product reminder check failed for %s: %s",
+            getattr(user, "id", None),
+            exc,
+        )
+
+
 # ── Products ───────────────────────────────────────────────────────────────────
 
 # backend/apps/api/views.py  — update ProductViewSet
@@ -68,6 +85,14 @@ class ProductViewSet(ModelViewSet):
         if self.action in ("create", "update", "partial_update"):
             return ProductCreateSerializer
         return ProductListSerializer
+
+    def list(self, request, *args, **kwargs):
+        _maybe_send_automated_product_update_reminder(request.user)
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        _maybe_send_automated_product_update_reminder(request.user)
+        return super().retrieve(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -770,47 +795,29 @@ class DashboardViewSet(ViewSet):
     """
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=["get"], url_path="summary")
-    def summary(self, request):
-        """
-        GET /api/v1/dashboard/summary/
-
-        Returns the complete dashboard state.
-        """
+    def _build_summary_data(self, user):
         from apps.core.usage import UsagePolicyService
-
-        throttle = UsagePolicyService().enforce_refresh_window(request.user, "dashboard-summary")
-        if throttle:
-            return Response(throttle, status=status.HTTP_429_TOO_MANY_REQUESTS)
-
-        user     = request.user
         from apps.engine.industry import IndustryInsightService
         from apps.engine.priorities import get_top_priorities
+        from apps.inventory.models import BurnRate
 
         products = Product.objects.filter(
             owner=user, is_active=True
         ).prefetch_related("burn_rates", "decisions")
 
-        total      = products.count()
-        avg_conf   = (
+        total = products.count()
+        avg_conf = (
             sum(p.confidence_score for p in products) / total
             if total > 0 else 0.0
         )
-        low_conf   = sum(1 for p in products if p.confidence_score < 0.4)
-        urgent     = [p for p in products if p.needs_verification]
-        now        = timezone.now()
+        low_conf = sum(1 for p in products if p.confidence_score < 0.4)
+        urgent = [p for p in products if p.needs_verification]
+        now = timezone.now()
         stale_cutoff = now - timedelta(days=2)
         stale_products = [
             p for p in products
             if not p.last_verified_at or p.last_verified_at < stale_cutoff
         ]
-
-        # Active decisions (PRO only)
-        active_decisions = []
-        top_priorities   = []
-        critical_count   = 0
-        stockouts_7d     = 0
-        revenue_at_risk_total = 0.0
 
         active_decisions = list(
             DecisionLog.objects
@@ -819,16 +826,13 @@ class DashboardViewSet(ViewSet):
                 is_acknowledged=False,
                 expires_at__gt=now,
             )
-            .exclude(
-                status__in=[DecisionLog.STATUS_ACTED, DecisionLog.STATUS_IGNORED]
-            )
+            .exclude(status__in=[DecisionLog.STATUS_ACTED, DecisionLog.STATUS_IGNORED])
             .select_related("product")
             .order_by("-priority_score", "-created_at")[:20]
         )
         top_priorities = get_top_priorities(user.id, limit=3)
         critical_count = sum(
-            1 for d in active_decisions
-            if d.action == DecisionLog.ALERT_CRITICAL
+            1 for d in active_decisions if d.action == DecisionLog.ALERT_CRITICAL
         )
         revenue_at_risk_total = round(
             sum(float(d.estimated_revenue_loss or 0.0) for d in active_decisions),
@@ -859,8 +863,6 @@ class DashboardViewSet(ViewSet):
             status=DecisionLog.STATUS_IGNORED
         ).count()
 
-        # Latest learning timestamp
-        from apps.inventory.models import BurnRate
         latest_br = (
             BurnRate.objects
             .filter(product__owner=user)
@@ -966,18 +968,19 @@ class DashboardViewSet(ViewSet):
         if baseline_in_use:
             operating_assumption = f"Based on similar businesses in Nigeria. {operating_assumption}"
         demand_deficits = analyze_product_deficits(user)
-        data = {
-            "total_products":          total,
+
+        return {
+            "total_products": total,
             "products_needing_action": len(urgent),
             "products_low_confidence": low_conf,
-            "critical_alerts":         critical_count,
-            "avg_confidence":          round(avg_conf, 4),
-            "tier":                    user.tier,
-            "is_pro":                  user.is_pro,
-            "active_decisions":        active_decisions,
-            "top_priorities":          top_priorities,
-            "urgent_products":         urgent[:10],
-            "contextual_insights":     industry_service.get_insights(user, limit=3),
+            "critical_alerts": critical_count,
+            "avg_confidence": round(avg_conf, 4),
+            "tier": user.tier,
+            "is_pro": user.is_pro,
+            "active_decisions": active_decisions,
+            "top_priorities": top_priorities,
+            "urgent_products": urgent[:10],
+            "contextual_insights": industry_service.get_insights(user, limit=3),
             "user_context": {
                 "name": user.first_name or user.username,
                 "business_name": getattr(user, "business_name", "") or user.username,
@@ -985,13 +988,13 @@ class DashboardViewSet(ViewSet):
                 "tier": user.tier,
                 "is_pro": user.is_pro,
             },
-            "journey_hint":            journey_hint,
-            "last_learning_at":        latest_br,
-            "stockouts_within_7d":     stockouts_7d,
-            "revenue_at_risk_total":   revenue_at_risk_total,
-            "stale_products_count":    len(stale_products),
-            "actioned_decisions_14d":  actioned_decisions_14d,
-            "ignored_decisions_14d":   ignored_decisions_14d,
+            "journey_hint": journey_hint,
+            "last_learning_at": latest_br,
+            "stockouts_within_7d": stockouts_7d,
+            "revenue_at_risk_total": revenue_at_risk_total,
+            "stale_products_count": len(stale_products),
+            "actioned_decisions_14d": actioned_decisions_14d,
+            "ignored_decisions_14d": ignored_decisions_14d,
             "managerial_brief": {
                 "headline": managerial_headline,
                 "subtext": managerial_subtext,
@@ -1007,6 +1010,23 @@ class DashboardViewSet(ViewSet):
             "baseline_in_use": baseline_in_use,
             "demand_deficits": demand_deficits,
         }
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        GET /api/v1/dashboard/summary/
+
+        Returns the complete dashboard state.
+        """
+        from apps.core.usage import UsagePolicyService
+
+        throttle = UsagePolicyService().enforce_refresh_window(request.user, "dashboard-summary")
+        if throttle:
+            return Response(throttle, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        user     = request.user
+        _maybe_send_automated_product_update_reminder(user)
+        data = self._build_summary_data(user)
 
         serializer = DashboardSummarySerializer(data, context={"request": request})
         return Response(serializer.data)
@@ -1076,6 +1096,7 @@ def notifications(request):
     Returns unread in-app notifications for the current user.
     """
     from apps.notifications.models import Notification
+    _maybe_send_automated_product_update_reminder(request.user)
     unread = Notification.objects.filter(
         user=request.user, is_read=False
     ).select_related("decision__product")[:50]
@@ -1286,6 +1307,7 @@ def me(request):
     Returns current user info including tier and notification settings.
     """
     user = request.user
+    _maybe_send_automated_product_update_reminder(user)
     return Response({
         "id":                           str(user.id),
         "username":                     user.username,
@@ -1296,10 +1318,10 @@ def me(request):
         "business_type":                user.business_type,
         "avatar_url":                   user.avatar_url,
         "phone_number":                 user.phone_number,
-        "whatsapp_enabled":             user.whatsapp_enabled,
+        "whatsapp_enabled":             False,
         "telegram_enabled":             user.telegram_enabled,
-        "preferred_channel":            user.preferred_channel,
-        "whatsapp_critical_only":       user.whatsapp_critical_only,
+        "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel == "whatsapp" else user.preferred_channel,
+        "whatsapp_critical_only":       False,
         "email_notifications_enabled":  user.email_notifications_enabled,
     })
 
@@ -1756,6 +1778,7 @@ def profile(request):
     """
     user = request.user
     if request.method == "GET":
+        _maybe_send_automated_product_update_reminder(user)
         telegram_profile = getattr(user, "telegram_profile", None)
         telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
         return Response({
@@ -1765,11 +1788,11 @@ def profile(request):
             "business_name":                user.business_name,
             "business_type":                user.business_type,
             "phone_number":                 user.phone_number,
-            "whatsapp_enabled":             user.whatsapp_enabled,
+            "whatsapp_enabled":             False,
             "telegram_enabled":             user.telegram_enabled,
             "telegram_linked":              telegram_linked,
-            "preferred_channel":            user.preferred_channel,
-            "whatsapp_critical_only":       user.whatsapp_critical_only,
+            "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel == "whatsapp" else user.preferred_channel,
+            "whatsapp_critical_only":       False,
             "email_notifications_enabled":  user.email_notifications_enabled,
             "avatar_url":                   user.avatar_url,
             "tier":                         user.tier,
@@ -1781,8 +1804,8 @@ def profile(request):
     # PATCH — update allowed fields
     allowed = [
         "business_name", "business_type", "phone_number",
-        "whatsapp_enabled", "email_notifications_enabled", "avatar_url",
-        "telegram_enabled", "preferred_channel", "whatsapp_critical_only",
+        "email_notifications_enabled", "avatar_url",
+        "telegram_enabled", "preferred_channel",
     ]
     telegram_profile = getattr(user, "telegram_profile", None)
     telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
@@ -1804,7 +1827,10 @@ def profile(request):
         )
     for field in allowed:
         if field in request.data:
-            setattr(user, field, request.data[field])
+            value = request.data[field]
+            if field == "preferred_channel" and value == "whatsapp":
+                value = user.CHANNEL_EMAIL
+            setattr(user, field, value)
     user.save()
     return Response({"status": "updated"})
 
@@ -1925,35 +1951,10 @@ def send_phone_otp(request):
     POST /api/v1/profile/phone/send-otp/
     Sends an OTP to the user's phone number for WhatsApp verification.
     """
-    from apps.core.models import OTPVerification
-    user = request.user
-    phone = request.data.get("phone_number", user.phone_number).strip()
-    if not phone:
-        return Response({"detail": "Phone number required."}, status=400)
-
-    # Temporarily store the phone being verified
-    user.phone_number = phone
-    user.save(update_fields=["phone_number"])
-
-    otp = OTPVerification.generate(user, OTPVerification.PURPOSE_PHONE)
-
-    # Send via Twilio if available
-    try:
-        from apps.billing.stripe_client import get_stripe   # reuse Twilio pattern
-        from django.conf import settings as djsettings
-        from twilio.rest import Client
-        client = Client(djsettings.TWILIO_ACCOUNT_SID, djsettings.TWILIO_AUTH_TOKEN)
-        client.messages.create(
-            body = f"Your SiloXR verification code: {otp.code}",
-            from_= djsettings.TWILIO_WHATSAPP_FROM,
-            to   = f"whatsapp:{phone}",
-        )
-    except Exception:
-        # Fall back to logging in dev
-        import logging
-        logging.getLogger(__name__).info("OTP for %s: %s", phone, otp.code)
-
-    return Response({"status": "otp_sent"})
+    return Response(
+        {"detail": "WhatsApp setup is temporarily disabled."},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 @api_view(["POST"])
@@ -1963,20 +1964,10 @@ def verify_phone_otp(request):
     POST /api/v1/profile/phone/verify/
     { code: "123456" }
     """
-    from apps.core.models import OTPVerification
-    user = request.user
-    code = request.data.get("code", "").strip()
-
-    otp = OTPVerification.objects.filter(
-        user=user, purpose=OTPVerification.PURPOSE_PHONE, is_used=False
-    ).order_by("-created_at").first()
-
-    if not otp or not otp.verify(code):
-        return Response({"detail": "Invalid or expired code."}, status=400)
-
-    user.whatsapp_enabled = True
-    user.save(update_fields=["whatsapp_enabled"])
-    return Response({"status": "verified", "whatsapp_enabled": True})
+    return Response(
+        {"detail": "WhatsApp setup is temporarily disabled."},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 # backend/apps/api/views.py — ADD
 

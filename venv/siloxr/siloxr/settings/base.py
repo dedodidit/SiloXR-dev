@@ -165,6 +165,10 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
+BUSINESS_BRIEF_TIMEZONE = os.environ.get("BUSINESS_BRIEF_TIMEZONE", "Africa/Lagos")
+BUSINESS_DAY_START_HOUR = int(os.environ.get("BUSINESS_DAY_START_HOUR", "8"))
+BUSINESS_DAY_CLOSE_HOUR = int(os.environ.get("BUSINESS_DAY_CLOSE_HOUR", "18"))
+BUSINESS_BRIEF_WINDOW_MINUTES = int(os.environ.get("BUSINESS_BRIEF_WINDOW_MINUTES", "90"))
 
 
 # -----------------------------

@@ -2,8 +2,11 @@
 
 import logging
 from html import escape
+import hashlib
+import json
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.utils import timezone
 
@@ -40,6 +43,98 @@ def dispatch_insight_notifications(product, insights) -> int:
     return created
 
 
+def dispatch_dashboard_insights(user, contextual_insights, managerial_signals, cadence_hours: int = 12) -> int:
+    """
+    Route dashboard-generated insights through the notification system while
+    debouncing repeated sends from frequent dashboard refreshes.
+    """
+    normalized = []
+
+    for item in contextual_insights or []:
+        title = item.get("title") or item.get("observation") or "Dashboard insight"
+        body = item.get("summary") or item.get("recommendation") or item.get("message") or ""
+        if not body:
+            continue
+        normalized.append(
+            {
+                "title": title,
+                "body": body,
+                "confidence": float(item.get("confidence", 0.55) or 0.55),
+                "dashboard_path": "/dashboard",
+            }
+        )
+
+    for item in managerial_signals or []:
+        title = item.get("title") or "Managerial signal"
+        summary = item.get("summary") or ""
+        recommendation = item.get("recommendation") or ""
+        value = item.get("value")
+        body_parts = [summary]
+        if value not in (None, ""):
+            body_parts.append(f"Current value: {value}")
+        if recommendation:
+            body_parts.append(recommendation)
+        body = "\n\n".join(part for part in body_parts if part)
+        if not body:
+            continue
+        target = item.get("target") or "dashboard"
+        normalized.append(
+            {
+                "title": title,
+                "body": body,
+                "confidence": 0.6 if item.get("tone") in {"critical", "warning"} else 0.5,
+                "dashboard_path": f"/dashboard#{target}",
+            }
+        )
+
+    if not normalized:
+        return 0
+
+    fingerprint = hashlib.sha256(
+        json.dumps(normalized[:3], sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    cache_key = f"dashboard_insights_notified:{user.id}:{fingerprint}"
+    if cache.get(cache_key):
+        return 0
+
+    from apps.notifications.router import NotificationRouter
+
+    router = NotificationRouter()
+    sent = 0
+    for insight in normalized[:3]:
+        sent += 1 if router.route_dashboard_insight(user, insight).in_app else 0
+
+    if sent:
+        cache.set(cache_key, True, timeout=max(3600, cadence_hours * 3600))
+    return sent
+
+
+def dispatch_dashboard_brief(user, summary_data, brief_type: str) -> bool:
+    """
+    Send a grouped dashboard brief for start/end of business.
+    """
+    from apps.notifications.router import NotificationRouter
+
+    if not summary_data:
+        return False
+
+    title = _build_dashboard_brief_title(brief_type)
+    body = _build_dashboard_brief_body(summary_data, brief_type)
+    html = _build_dashboard_brief_email_html(user, summary_data, title, brief_type)
+
+    result = NotificationRouter().route_dashboard_brief(
+        user,
+        {
+            "title": title,
+            "body": body,
+            "html": html,
+            "confidence": 0.62,
+            "dashboard_path": "/dashboard",
+        },
+    )
+    return result.any_delivered
+
+
 def _build_title(decision: DecisionLog) -> str:
     prefix = {
         DecisionLog.ALERT_CRITICAL: "Urgent",
@@ -61,6 +156,13 @@ def _build_email_html(decision: DecisionLog, title: str, body: str) -> str:
     confidence = int((decision.confidence_score or 0) * 100)
     product = decision.product
     severity = getattr(decision, "severity", "info").title()
+    dashboard_url = _dashboard_url("/dashboard")
+    products_url = _dashboard_url("/products")
+    ctas = []
+    if dashboard_url:
+        ctas.append(_build_cta_html("Open dashboard", dashboard_url))
+    if products_url:
+        ctas.append(_build_cta_html("Review products", products_url))
 
     return f"""
     <html>
@@ -74,6 +176,7 @@ def _build_email_html(decision: DecisionLog, title: str, body: str) -> str:
           Estimated stock: {round(product.estimated_quantity)} {product.unit}<br />
           Confidence: {confidence}%
         </p>
+        {''.join(ctas)}
       </body>
     </html>
     """
@@ -149,9 +252,120 @@ def _build_product_update_email_html(user, products, title: str, body: str) -> s
     """
 
 
+def _build_insight_email_html(user, title: str, body: str, dashboard_path: str = "/dashboard") -> str:
+    dashboard_url = _dashboard_url(dashboard_path)
+    cta = _build_cta_html("Open dashboard", dashboard_url) if dashboard_url else ""
+    return f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; color: #141412;">
+        <h2 style="margin-bottom: 8px;">{escape(title)}</h2>
+        <p style="margin: 0 0 12px;">Hi {escape(user.first_name or user.username or 'there')},</p>
+        <p style="margin: 0 0 12px; white-space: pre-line;">{escape(body)}</p>
+        {cta}
+      </body>
+    </html>
+    """
+
+
+def _build_dashboard_brief_title(brief_type: str) -> str:
+    if brief_type == "opening":
+        return "Opening brief: SiloXR dashboard"
+    if brief_type == "closing":
+        return "Closing brief: SiloXR dashboard"
+    return "Business brief: SiloXR dashboard"
+
+
+def _build_dashboard_brief_body(summary_data, brief_type: str) -> str:
+    lines = []
+    if brief_type == "opening":
+        lines.append("Here is your start-of-business dashboard brief.")
+    elif brief_type == "closing":
+        lines.append("Here is your close-of-business dashboard brief.")
+    else:
+        lines.append("Here is your dashboard brief.")
+
+    managerial = (summary_data or {}).get("managerial_brief", {}) or {}
+    if managerial.get("headline"):
+        lines.extend(["", managerial["headline"]])
+    if managerial.get("subtext"):
+        lines.append(managerial["subtext"])
+
+    contextual = list((summary_data or {}).get("contextual_insights", []) or [])[:3]
+    if contextual:
+        lines.extend(["", "Top dashboard insights:"])
+        for item in contextual:
+            title = item.get("title") or item.get("observation") or "Insight"
+            summary = item.get("summary") or item.get("recommendation") or ""
+            lines.append(f"- {title}: {summary}")
+
+    signals = list((summary_data or {}).get("managerial_signals", []) or [])[:2]
+    if signals:
+        lines.extend(["", "Key management signals:"])
+        for item in signals:
+            label = item.get("title") or "Signal"
+            value = item.get("value")
+            summary = item.get("summary") or ""
+            prefix = f"{label} ({value})" if value not in (None, "") else label
+            lines.append(f"- {prefix}: {summary}")
+
+    dashboard_url = _dashboard_url("/dashboard")
+    if dashboard_url:
+        lines.extend(["", f"Open dashboard: {dashboard_url}"])
+
+    return "\n".join(lines)
+
+
+def _build_dashboard_brief_email_html(user, summary_data, title: str, brief_type: str) -> str:
+    contextual = list((summary_data or {}).get("contextual_insights", []) or [])[:3]
+    signals = list((summary_data or {}).get("managerial_signals", []) or [])[:2]
+    managerial = (summary_data or {}).get("managerial_brief", {}) or {}
+
+    intro = "start-of-business" if brief_type == "opening" else "close-of-business" if brief_type == "closing" else "business"
+    contextual_items = "".join(
+        f"<li><strong>{escape(item.get('title') or item.get('observation') or 'Insight')}</strong>"
+        f" — {escape(item.get('summary') or item.get('recommendation') or '')}</li>"
+        for item in contextual
+    )
+    signal_items = ""
+    for item in signals:
+        label = escape(item.get("title") or "Signal")
+        value = item.get("value")
+        value_part = f" ({escape(str(value))})" if value not in (None, "") else ""
+        summary = escape(item.get("summary") or "")
+        signal_items += f"<li><strong>{label}</strong>{value_part} — {summary}</li>"
+
+    dashboard_url = _dashboard_url("/dashboard")
+    products_url = _dashboard_url("/products")
+    ctas = ""
+    if dashboard_url:
+        ctas += _build_cta_html("Open dashboard", dashboard_url)
+    if products_url:
+        ctas += _build_cta_html("Review products", products_url)
+
+    return f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; color: #141412;">
+        <h2 style="margin-bottom: 8px;">{escape(title)}</h2>
+        <p style="margin: 0 0 12px;">Hi {escape(user.first_name or user.username or 'there')}, here is your {escape(intro)} dashboard brief.</p>
+        <p style="margin: 0 0 12px;"><strong>{escape(managerial.get('headline', 'Dashboard update'))}</strong></p>
+        <p style="margin: 0 0 12px;">{escape(managerial.get('subtext', ''))}</p>
+        <h3 style="margin: 16px 0 8px;">Top insights</h3>
+        <ul style="margin: 0 0 16px 18px;">{contextual_items}</ul>
+        <h3 style="margin: 16px 0 8px;">Management signals</h3>
+        <ul style="margin: 0 0 16px 18px;">{signal_items}</ul>
+        {ctas}
+      </body>
+    </html>
+    """
+
+
 def _send_email(user, decision: DecisionLog, title: str, body: str) -> bool:
     html = _build_email_html(decision, title, body)
-    return _send_email_message(user, title, f"{_recommendation(decision)}\n\n{body}", html)
+    text_body = f"{_recommendation(decision)}\n\n{body}"
+    dashboard_url = _dashboard_url("/dashboard")
+    if dashboard_url:
+        text_body = f"{text_body}\n\nOpen dashboard: {dashboard_url}"
+    return _send_email_message(user, title, text_body, html)
 
 
 def _send_email_message(user, title: str, body: str, html_message: str | None = None) -> bool:
@@ -197,3 +411,23 @@ def _recommendation(decision: DecisionLog) -> str:
     if decision.action == DecisionLog.CHECK_STOCK:
         return "Verify the shelf count."
     return "Keep monitoring the product."
+
+
+def _dashboard_url(path: str = "/dashboard") -> str:
+    frontend = getattr(settings, "FRONTEND_BASE_URL", "").rstrip("/")
+    if not frontend:
+        return ""
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{frontend}{path}"
+
+
+def _build_cta_html(label: str, url: str) -> str:
+    if not url:
+        return ""
+    return (
+        f'<p style="margin: 16px 0 0;">'
+        f'<a href="{escape(url)}" '
+        f'style="color: #0F766E; text-decoration: none; font-weight: 600;">'
+        f"{escape(label)}</a></p>"
+    )

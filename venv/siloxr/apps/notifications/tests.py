@@ -1,19 +1,26 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.inventory.models import Product
 from apps.notifications.models import Notification, NotificationThrottle, TelegramProfile
-from apps.notifications.reminders import send_product_update_reminders
+from apps.notifications.reminders import (
+    maybe_send_automated_product_update_reminder,
+    send_product_update_reminders,
+)
+from apps.notifications.dispatch import dispatch_dashboard_insights
+from apps.notifications.business_briefs import resolve_business_brief_type, send_business_briefs
 from apps.notifications.router import NotificationRouter
 
 
 class ProductUpdateReminderTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()
+        cache.clear()
 
     def _make_user(self, **overrides):
         defaults = {
@@ -84,3 +91,84 @@ class ProductUpdateReminderTests(TestCase):
         self.assertEqual(second.users_notified, 0)
         self.assertEqual(Notification.objects.filter(user=user).count(), 1)
         send_mail_mock.assert_called_once()
+
+    @patch("apps.notifications.dispatch.send_mail")
+    def test_maybe_send_automated_product_update_reminder_debounces_checks(self, send_mail_mock):
+        user = self._make_user()
+        self._make_product(user, sku="SKU-AUTO-1")
+
+        first = maybe_send_automated_product_update_reminder(
+            user,
+            cadence_hours=24,
+            check_interval_minutes=60,
+        )
+        second = maybe_send_automated_product_update_reminder(
+            user,
+            cadence_hours=24,
+            check_interval_minutes=60,
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNone(second)
+        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+        send_mail_mock.assert_called_once()
+
+    @patch("apps.notifications.dispatch.send_mail")
+    def test_dispatch_dashboard_insights_routes_once_per_fingerprint(self, send_mail_mock):
+        user = self._make_user()
+
+        contextual = [
+            {
+                "title": "Trend shift",
+                "summary": "Demand is climbing faster than last week.",
+                "recommendation": "Review your top movers today.",
+                "confidence": 0.68,
+            }
+        ]
+        managerial = [
+            {
+                "title": "Revenue at risk",
+                "summary": "Two critical products are exposing near-term sales.",
+                "recommendation": "Open the dashboard and clear the critical queue first.",
+                "value": "N25,000",
+                "tone": "critical",
+                "target": "decisions",
+            }
+        ]
+
+        first = dispatch_dashboard_insights(user, contextual, managerial, cadence_hours=12)
+        second = dispatch_dashboard_insights(user, contextual, managerial, cadence_hours=12)
+
+        self.assertEqual(first, 2)
+        self.assertEqual(second, 0)
+        self.assertEqual(Notification.objects.filter(user=user).count(), 2)
+        self.assertEqual(send_mail_mock.call_count, 2)
+
+        html_message = send_mail_mock.call_args.kwargs.get("html_message", "")
+        self.assertIn("/dashboard#decisions", html_message)
+
+    def test_resolve_business_brief_type_uses_business_windows(self):
+        opening = datetime(2026, 3, 23, 7, 30, tzinfo=dt_timezone.utc)
+        closing = datetime(2026, 3, 23, 17, 30, tzinfo=dt_timezone.utc)
+        midday = datetime(2026, 3, 23, 12, 0, tzinfo=dt_timezone.utc)
+
+        self.assertEqual(resolve_business_brief_type(opening), "opening")
+        self.assertEqual(resolve_business_brief_type(closing), "closing")
+        self.assertIsNone(resolve_business_brief_type(midday))
+
+    @patch("apps.notifications.business_briefs.dispatch_dashboard_brief", return_value=True)
+    @patch("apps.api.views.DashboardViewSet._build_summary_data")
+    def test_send_business_briefs_records_once_per_window(self, build_summary_mock, dispatch_brief_mock):
+        user = self._make_user()
+        build_summary_mock.return_value = {
+            "managerial_brief": {"headline": "Stable", "subtext": "Keep counts current."},
+            "contextual_insights": [],
+            "managerial_signals": [],
+        }
+
+        first = send_business_briefs(brief_type="opening", user_limit=1)
+        second = send_business_briefs(brief_type="opening", user_limit=1)
+
+        self.assertEqual(first.briefs_sent, 1)
+        self.assertEqual(second.briefs_sent, 0)
+        dispatch_brief_mock.assert_called_once()
