@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../constants/site"
 
+const runtimeConfig = useRuntimeConfig()
+const siteUrl = String(runtimeConfig.public.siteUrl || "https://siloxr.com").replace(/\/+$/, "")
+const canonicalUrl = `${siteUrl}/`
+const ogImageUrl = `${siteUrl}/og-image.svg`
+
 useHead({
   title: "Stop Losing Sales to Stockouts | SiloXR — The Business Decision Engine",
   link: [
@@ -24,6 +29,21 @@ useHead({
     { name: "twitter:description", content: "The decision engine that prevents stockouts and reduces waste for small retail businesses." },
     { name: "twitter:image",       content: "/og-image.png" },
   ]
+})
+
+useSeoMeta({
+  title: "Inventory Management Software for Small Business | SiloXR",
+  description: "SiloXR helps small businesses prevent stockouts, protect cash flow, and know what to reorder before revenue is lost.",
+  keywords: "inventory management software, small business inventory software, stockout prevention, reorder alerts, demand forecasting for retail, inventory analytics",
+  ogType: "website",
+  ogUrl: canonicalUrl,
+  ogTitle: "Inventory Management Software for Small Business | SiloXR",
+  ogDescription: "Prevent stockouts before they cost you revenue. SiloXR turns messy inventory data into clear reorder decisions.",
+  ogImage: ogImageUrl,
+  twitterCard: "summary_large_image",
+  twitterTitle: "SiloXR | Prevent Stockouts Before Revenue Is Lost",
+  twitterDescription: "Inventory decision software for small businesses that need better reorder timing, cash-flow protection, and demand-aware stock decisions.",
+  twitterImage: ogImageUrl,
 })
 
 const features = [
@@ -50,6 +70,73 @@ const steps = [
   { n: "03", title: "See your risk",         desc: "SiloXR immediately identifies which products are trending toward a stockout." },
   { n: "04", title: "Take action",           desc: "Get a clear 'Restock' or 'Hold' list every morning to maximize your daily profit." },
 ]
+
+const faqs = [
+  {
+    question: "What does SiloXR do?",
+    answer: "SiloXR helps small businesses track inventory risk, predict likely stockouts, and decide what to reorder before sales are lost.",
+  },
+  {
+    question: "Who is SiloXR built for?",
+    answer: "SiloXR is designed for retail shops, pharmacies, food businesses, wholesalers, mini-supermarkets, and other operators who need simple stock decisions without heavy ERP software.",
+  },
+  {
+    question: "Do I need perfect inventory data to use SiloXR?",
+    answer: "No. SiloXR is built to work with imperfect sales and stock logs, then improve decision quality as more data is recorded over time.",
+  },
+  {
+    question: "Can I start for free?",
+    answer: "Yes. SiloXR offers a free tier for small businesses getting started with a limited number of products.",
+  },
+]
+
+useHead({
+  link: [
+    { rel: "canonical", href: canonicalUrl },
+  ],
+  script: [
+    {
+      key: "ld-json-home",
+      type: "application/ld+json",
+      children: JSON.stringify([
+        {
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: "SiloXR",
+          url: canonicalUrl,
+          email: SITE_CONTACT_EMAIL,
+          logo: ogImageUrl,
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "SiloXR",
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web",
+          offers: {
+            "@type": "Offer",
+            price: "0",
+            priceCurrency: "USD",
+          },
+          description: "Inventory decision software for small businesses that helps prevent stockouts and improve reorder timing.",
+          url: canonicalUrl,
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: faqs.map((item) => ({
+            "@type": "Question",
+            name: item.question,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: item.answer,
+            },
+          })),
+        },
+      ]),
+    },
+  ],
+})
 </script>
 
 <template>
@@ -222,6 +309,18 @@ const steps = [
         <div v-for="ind in industries" :key="ind.name" class="landing__ind-card surface">
           <span class="landing__ind-icon">{{ ind.icon }}</span>
           <span class="landing__ind-name">{{ ind.name }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing__faq">
+      <div class="landing__faq-inner">
+        <h2 class="landing__section-title">Frequently asked questions</h2>
+        <div class="landing__faq-grid">
+          <article v-for="item in faqs" :key="item.question" class="landing__faq-card surface">
+            <h3 class="landing__faq-title">{{ item.question }}</h3>
+            <p class="landing__faq-copy">{{ item.answer }}</p>
+          </article>
         </div>
       </div>
     </section>
@@ -446,6 +545,33 @@ const steps = [
 .landing__ind-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
 .landing__ind-icon   { font-size: 22px; }
 .landing__ind-name   { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* FAQ */
+.landing__faq {
+  padding: 0 var(--page-pad) 72px;
+}
+.landing__faq-inner {
+  max-width: var(--page-max);
+  margin: 0 auto;
+}
+.landing__faq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+.landing__faq-card {
+  padding: 22px;
+}
+.landing__faq-title {
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--text);
+}
+.landing__faq-copy {
+  margin-top: 10px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
 
 /* Final CTA */
 .landing__final-cta {

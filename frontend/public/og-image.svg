@@ -1,0 +1,26 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#F4F3EF"/>
+  <rect x="64" y="64" width="1072" height="502" rx="32" fill="url(#bg)"/>
+  <rect x="112" y="110" width="152" height="152" rx="28" fill="url(#mark)"/>
+  <path d="M151 219L188 145L225 219H151Z" fill="white" fill-opacity="0.96"/>
+  <path d="M170 219L188 181L206 219H170Z" fill="white" fill-opacity="0.52"/>
+  <text x="304" y="192" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700">SiloXR</text>
+  <text x="304" y="258" fill="#D9D4FF" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="600">The Inventory Decision Engine</text>
+  <text x="112" y="374" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="62" font-weight="700">
+    <tspan x="112" dy="0">Prevent stockouts before</tspan>
+    <tspan x="112" dy="82">they cost you revenue.</tspan>
+  </text>
+  <text x="112" y="530" fill="#E9E5FF" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="500">
+    Reorder signals • cash-flow protection • demand-aware inventory decisions
+  </text>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="64" x2="1136" y2="566" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2D2475"/>
+      <stop offset="1" stop-color="#5E4FD6"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="112" y1="110" x2="264" y2="262" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8478FF"/>
+      <stop offset="1" stop-color="#5B48E6"/>
+    </linearGradient>
+  </defs>
+</svg>

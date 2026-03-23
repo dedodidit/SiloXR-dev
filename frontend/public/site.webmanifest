@@ -1,0 +1,16 @@
+{
+  "name": "SiloXR",
+  "short_name": "SiloXR",
+  "description": "SiloXR helps small businesses prevent stockouts and make better inventory decisions before revenue is lost.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f3ef",
+  "theme_color": "#534AB7",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -11,6 +11,7 @@ const router = useRouter()
 const route  = useRoute()
 const token  = useCookie("siloxr_token")
 const { $api } = useNuxtApp()
+const runtimeConfig = useRuntimeConfig()
 
 const isAuthPage    = computed(() => route.path.startsWith("/auth/"))
 const isOnboardPage = computed(() => route.path === "/onboarding")
@@ -19,6 +20,12 @@ const isWorkspace   = computed(() => route.path.startsWith("/workspace/"))
 const showSidebar   = computed(() => isWorkspace.value && showHeader.value)
 const isPublicMarketing = computed(() => route.path === "/" || route.path.startsWith("/landing"))
 const showHeader    = computed(() => !isAuthPage.value && !isPublicMarketing.value && !!token.value)
+const siteUrl = computed(() => String(runtimeConfig.public.siteUrl || "https://siloxr.com").replace(/\/+$/, ""))
+const canonicalUrl = computed(() => {
+  const path = route.path === "/" ? "/" : route.path.replace(/\/+$/, "") || "/"
+  return `${siteUrl.value}${path}`
+})
+const isIndexableRoute = computed(() => route.path === "/")
 
 const user = ref<any>(null)
 const currentUser = useState<any | null>("current-user", () => null)
@@ -85,6 +92,18 @@ const userInitial = computed(() =>
   displayUserName.value.trim().charAt(0).toUpperCase() || "S"
 )
 const isFreeUser = computed(() => Boolean(headerUser.value) && !headerUser.value?.is_pro)
+
+useHead(() => ({
+  link: [
+    { rel: "canonical", href: canonicalUrl.value },
+  ],
+  meta: [
+    {
+      name: "robots",
+      content: isIndexableRoute.value ? "index, follow, max-image-preview:large" : "noindex, nofollow",
+    },
+  ],
+}))
 </script>
 
 <template>
