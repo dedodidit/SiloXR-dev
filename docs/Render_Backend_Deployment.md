@@ -24,8 +24,8 @@ gunicorn siloxr.wsgi:application --bind 0.0.0.0:$PORT
 ```env
 DJANGO_SETTINGS_MODULE=siloxr.settings.production
 SECRET_KEY=replace-with-real-secret
-ALLOWED_HOSTS=your-render-service.onrender.com
-CSRF_TRUSTED_ORIGINS=https://your-render-service.onrender.com,https://your-vercel-frontend.vercel.app
+ALLOWED_HOSTS=siloxr-dev.onrender.com
+CSRF_TRUSTED_ORIGINS=https://siloxr-dev.onrender.com,https://your-vercel-frontend.vercel.app
 
 DB_BACKEND=postgres
 POSTGRES_DB=postgres
@@ -73,3 +73,16 @@ python manage.py migrate --settings=siloxr.settings.production
 - record a sale or stock count
 - verify billing page opens
 - verify backend API responds without host/csrf errors
+
+## Current Backend Host
+
+Your current Render backend URL is:
+
+- `https://siloxr-dev.onrender.com`
+
+So the minimum backend host settings should be:
+
+```env
+ALLOWED_HOSTS=siloxr-dev.onrender.com
+CSRF_TRUSTED_ORIGINS=https://siloxr-dev.onrender.com,https://your-vercel-frontend.vercel.app
+```

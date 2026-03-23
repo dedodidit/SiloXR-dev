@@ -55,6 +55,19 @@ npm run build
    - signup/login/reset password work
    - billing upgrade page loads correct price
 
+## Ongoing Releases
+
+Use the standard release process in:
+
+- [Release_Workflow.md](/C:/Users/HP/Desktop/SiloXR_/docs/Release_Workflow.md)
+
+This is the day-to-day path for:
+
+- making local changes
+- pushing to GitHub
+- triggering Vercel/Render deploys
+- running migrations when needed
+
 ## Post-Go-Live Checks
 
 1. Login with an existing migrated user.
