@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 # -----------------------------
 # PATHS
@@ -31,6 +32,28 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _split_csv(value: str) -> list[str]:
+    return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _origin_from_url(value: str) -> str:
+    parsed = urlparse((value or "").strip())
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
 
 
 _load_local_env()
@@ -118,15 +141,22 @@ WSGI_APPLICATION = "siloxr.wsgi.application"
 DB_BACKEND = os.environ.get("DB_BACKEND", "sqlite").strip().lower()
 
 if DB_BACKEND == "postgres":
+    postgres_host = os.environ.get("POSTGRES_HOST", "127.0.0.1")
+    default_conn_max_age = "0" if "pooler.supabase.com" in postgres_host else "60"
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": os.environ.get("POSTGRES_DB", "siloxr"),
             "USER": os.environ.get("POSTGRES_USER", "siloxr"),
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
-            "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+            "HOST": postgres_host,
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-            "CONN_MAX_AGE": int(os.environ.get("POSTGRES_CONN_MAX_AGE", "60")),
+            "CONN_MAX_AGE": int(os.environ.get("POSTGRES_CONN_MAX_AGE", default_conn_max_age)),
+            "CONN_HEALTH_CHECKS": _env_bool("POSTGRES_CONN_HEALTH_CHECKS", True),
+            "DISABLE_SERVER_SIDE_CURSORS": _env_bool(
+                "POSTGRES_DISABLE_SERVER_SIDE_CURSORS",
+                "pooler.supabase.com" in postgres_host,
+            ),
             "OPTIONS": {
                 "sslmode": os.environ.get("POSTGRES_SSLMODE", "prefer"),
             },
@@ -225,13 +255,15 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES":      ("Bearer",),
 }
 
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
-    ).split(",")
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = _dedupe(
+    _split_csv(os.environ.get("CORS_ALLOWED_ORIGINS", ""))
+    + [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        _origin_from_url(FRONTEND_BASE_URL),
+        "https://siloxr.com",
+        "https://www.siloxr.com",
+    ]
+)
 
 CORS_ALLOW_CREDENTIALS = True
