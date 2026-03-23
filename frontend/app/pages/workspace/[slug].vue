@@ -384,7 +384,7 @@ const businessHealthInsights = computed(() => {
   const insights: string[] = []
   if (analyticsGapWeekly.value > 0 && businessHealthDemandGaps.value.length) {
     insights.push(
-      `${businessHealthDemandGaps.value.length} visible demand gap${businessHealthDemandGaps.value.length === 1 ? "" : "s"} could be costing about ${formatNaira(analyticsGapWeekly.value)} per week.`
+      `${businessHealthDemandGaps.value.length} visible demand gap${businessHealthDemandGaps.value.length === 1 ? "" : "s"} could be costing about ${formatCurrency(analyticsGapWeekly.value)} per week.`
     )
   }
   if (businessHealthTopProducts.value.length) {
@@ -414,9 +414,9 @@ const investorSummary = computed(() => {
     return "This business health view is ready, but it needs more live inventory and sales activity before monthly revenue can be estimated with confidence."
   }
   const gapClause = analyticsGapWeekly.value > 0
-    ? `Current analysis suggests about ${formatNaira(analyticsGapWeekly.value)} per week may still be leaking through unmet demand.`
+    ? `Current analysis suggests about ${formatCurrency(analyticsGapWeekly.value)} per week may still be leaking through unmet demand.`
     : "Current analysis does not show a material weekly revenue leakage from unmet demand."
-  return `This business is currently processing about ${formatNaira(analyticsMonthlyRevenue.value)} per month, with key revenue drivers in ${driverNames}. ${gapClause} The confidence level on this operating view is ${Math.round(analyticsConfidence.value * 100)}%.`
+  return `This business is currently processing about ${formatCurrency(analyticsMonthlyRevenue.value)} per month, with key revenue drivers in ${driverNames}. ${gapClause} The confidence level on this operating view is ${Math.round(analyticsConfidence.value * 100)}%.`
 })
 const healthPillars = computed(() => [
   {
@@ -441,7 +441,7 @@ const healthPillars = computed(() => [
 const businessHealthPrimaryTitle = computed(() => {
   const monthlyRevenue = analyticsMonthlyRevenue.value
   if (monthlyRevenue <= 0) return "More live operating data will sharpen the business story"
-  return `Estimated monthly revenue is ${formatNaira(monthlyRevenue)}`
+  return `Estimated monthly revenue is ${formatCurrency(monthlyRevenue)}`
 })
 const businessHealthHeroCopy = computed(() => {
   if (investorSummary.value) return investorSummary.value
@@ -453,6 +453,8 @@ const businessHealthGapCoverage = computed(() => {
   if (weeklyRevenue <= 0 || weeklyGap <= 0) return null
   return Math.round((weeklyGap / weeklyRevenue) * 100)
 })
+
+const formatCurrency = (value: number) => `NGN ${Math.round(Number(value || 0)).toLocaleString()}`
 
 function formatNaira(value: number) {
   return `₦${Math.round(Number(value || 0)).toLocaleString()}`
@@ -730,13 +732,13 @@ watch(dashboardRefreshTick, async () => {
         <div class="workspace__grid workspace__grid--health-metrics">
           <div class="workspace__metric-card surface">
             <p class="workspace__panel-eyebrow">Weekly revenue</p>
-            <h3 class="workspace__metric-value">{{ formatNaira(analyticsWeeklyRevenue) }}</h3>
+            <h3 class="workspace__metric-value">{{ formatCurrency(analyticsWeeklyRevenue) }}</h3>
             <p class="workspace__panel-copy">Observed weekly revenue generated from your live product movement and inferred demand.</p>
           </div>
 
           <div class="workspace__metric-card surface">
             <p class="workspace__panel-eyebrow">Revenue gap</p>
-            <h3 class="workspace__metric-value workspace__metric-value--danger">{{ formatNaira(analyticsGapWeekly) }}</h3>
+            <h3 class="workspace__metric-value workspace__metric-value--danger">{{ formatCurrency(analyticsGapWeekly) }}</h3>
             <p class="workspace__panel-copy">
               {{
                 businessHealthGapCoverage != null
@@ -791,7 +793,7 @@ watch(dashboardRefreshTick, async () => {
                     <p class="workspace__rank-sub">Estimated weekly revenue contribution</p>
                   </div>
                 </div>
-                <strong class="workspace__rank-value">{{ formatNaira(Number(product.estimated_weekly_revenue ?? 0)) }}</strong>
+                <strong class="workspace__rank-value">{{ formatCurrency(Number(product.estimated_weekly_revenue ?? 0)) }}</strong>
               </div>
             </div>
             <div v-else class="workspace__starter-list">
@@ -828,7 +830,7 @@ watch(dashboardRefreshTick, async () => {
                   </p>
                 </div>
                 <div class="workspace__health-gap-metrics">
-                  <strong>{{ formatNaira(Number(gap.gap_revenue ?? 0)) }}/week</strong>
+                  <strong>{{ formatCurrency(Number(gap.gap_revenue ?? 0)) }}/week</strong>
                   <span>{{ Math.round(Number(gap.gap_units ?? 0)) }} units gap</span>
                 </div>
               </div>
