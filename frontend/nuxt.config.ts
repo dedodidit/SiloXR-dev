@@ -8,6 +8,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: [
     "@vueuse/nuxt",
+    "@vercel/analytics",
   ],
   components: [
     { path: "~/components", pathPrefix: false },
