@@ -4,6 +4,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    BusinessHealthViewSet,
     DashboardViewSet,
     DecisionViewSet,
     EventSyncViewSet,
@@ -24,6 +25,7 @@ router.register(r"decisions",       DecisionViewSet,  basename="decision")
 router.register(r"forecasts",       ForecastViewSet,  basename="forecast")
 router.register(r"dashboard",       DashboardViewSet, basename="dashboard")
 router.register(r"portfolio",       PortfolioViewSet, basename="portfolio")
+router.register(r"business-health", BusinessHealthViewSet, basename="business-health")
 router.register(r"reorders",        ReorderRecordViewSet, basename="reorder")
 
 urlpatterns = [

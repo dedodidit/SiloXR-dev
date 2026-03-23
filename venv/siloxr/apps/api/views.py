@@ -21,6 +21,7 @@ from apps.inventory.models import (
 from apps.inventory.events import EventProcessor
 from .permissions import IsOwner
 from .serializers import (
+    BusinessHealthReportSerializer,
     BulkEventSyncSerializer,
     DashboardSummarySerializer,
     DecisionLogSerializer,
@@ -530,6 +531,18 @@ class PortfolioViewSet(ViewSet):
             },
             context={"request": request},
         )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class BusinessHealthViewSet(ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        from apps.engine.business_health import BusinessHealthReportService
+
+        report = BusinessHealthReportService().report_for_user(request.user)
+        serializer = BusinessHealthReportSerializer(report, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

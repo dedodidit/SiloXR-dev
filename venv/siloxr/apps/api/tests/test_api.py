@@ -6,7 +6,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.inventory.models import DecisionLog, ForecastSnapshot, Product
+from apps.core.models import NigeriaBaselineProduct
+from apps.inventory.models import BurnRate, DecisionLog, ForecastSnapshot, Product
 from apps.inventory.events import EventProcessor
 
 
@@ -192,6 +193,54 @@ class TestDashboardEndpoints(APITestBase):
         resp = self.client.get("/api/v1/dashboard/health/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("status", resp.data)
+
+
+class TestBusinessHealthEndpoints(APITestBase):
+
+    def test_summary_returns_structured_business_health_report(self):
+        self.auth_pro()
+        self.product.name = "Coca-Cola 50cl PET"
+        self.product.selling_price = 300
+        self.product.confidence_score = 0.72
+        self.product.category = "beverages"
+        self.product.save(update_fields=["name", "selling_price", "confidence_score", "category"])
+
+        BurnRate.objects.create(
+            product=self.product,
+            burn_rate_per_day=5.0,
+            burn_rate_std_dev=1.0,
+            sample_event_count=8,
+            confidence_score=0.76,
+            window_days=30,
+        )
+        NigeriaBaselineProduct.objects.create(
+            country="nigeria",
+            industry="retail",
+            category="beverages",
+            generic_category="carbonated_soft_drink",
+            product_name="Coca-Cola 50cl PET",
+            unit_type="unit",
+            weekly_turnover_low=30.0,
+            weekly_turnover_high=42.0,
+            avg_weekly_turnover=35.0,
+            demand_std=4.0,
+            daily_demand=5.0,
+            avg_unit_price=300.0,
+            cv_estimate=0.2,
+            lead_time_days=2,
+            source="test_fixture",
+        )
+
+        resp = self.client.get("/api/v1/business-health/summary/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("summary", resp.data)
+        self.assertIn("top_products", resp.data)
+        self.assertIn("demand_gaps", resp.data)
+        self.assertIn("investor_summary", resp.data)
+        self.assertEqual(resp.data["summary"]["estimated_weekly_revenue"], 10500.0)
+        self.assertGreaterEqual(resp.data["summary"]["potential_revenue_gap_weekly"], 0.0)
+        self.assertEqual(resp.data["top_products"][0]["name"], "Coca-Cola 50cl PET")
 
 
 class TestOfflineSync(APITestBase):

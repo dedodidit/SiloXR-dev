@@ -573,3 +573,32 @@ class PortfolioSummarySerializer(serializers.Serializer):
     forecast_accuracy = serializers.FloatField()
     confidence_score = serializers.FloatField()
     overstock_capital = serializers.FloatField()
+
+
+class BusinessHealthSummarySerializer(serializers.Serializer):
+    estimated_monthly_revenue = serializers.FloatField()
+    estimated_weekly_revenue = serializers.FloatField()
+    potential_revenue_gap_weekly = serializers.FloatField()
+    confidence_score = serializers.FloatField()
+
+
+class BusinessHealthTopProductSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    estimated_weekly_revenue = serializers.FloatField()
+
+
+class BusinessHealthDemandGapSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    expected_weekly_demand = serializers.FloatField()
+    observed_weekly_demand = serializers.FloatField()
+    gap_units = serializers.FloatField()
+    gap_revenue = serializers.FloatField()
+    confidence = serializers.FloatField()
+
+
+class BusinessHealthReportSerializer(serializers.Serializer):
+    summary = BusinessHealthSummarySerializer()
+    top_products = BusinessHealthTopProductSerializer(many=True)
+    demand_gaps = BusinessHealthDemandGapSerializer(many=True)
+    insights = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+    investor_summary = serializers.CharField()

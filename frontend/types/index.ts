@@ -176,6 +176,35 @@ export interface PortfolioSummary {
   overstock_capital: number
 }
 
+export interface BusinessHealthSummary {
+  estimated_monthly_revenue: number
+  estimated_weekly_revenue: number
+  potential_revenue_gap_weekly: number
+  confidence_score: number
+}
+
+export interface BusinessHealthTopProduct {
+  name: string
+  estimated_weekly_revenue: number
+}
+
+export interface BusinessHealthDemandGap {
+  name: string
+  expected_weekly_demand: number
+  observed_weekly_demand: number
+  gap_units: number
+  gap_revenue: number
+  confidence: number
+}
+
+export interface BusinessHealthReport {
+  summary: BusinessHealthSummary
+  top_products: BusinessHealthTopProduct[]
+  demand_gaps: BusinessHealthDemandGap[]
+  insights: string[]
+  investor_summary: string
+}
+
 export interface ReorderRecord {
   id: string
   product: string
