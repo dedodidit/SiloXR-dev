@@ -13,9 +13,9 @@ useHead({
   ],
   meta: [
     { name: "description",
-      content: "Stop losing money on out-of-stock items and wasted inventory. SiloXR predicts your stock risks and tells you exactly what to reorder before you lose a sale. Free for small businesses." },
+      content: "Stop losing money on out-of-stock items and wasted inventory. SiloXR identifies stock risks and tells you exactly what to reorder before you lose a sale." },
     { name: "keywords",
-      content: "inventory management for small business, avoid stockouts, stock prediction software, retail inventory alerts, reorder alerts system, demand forecasting retail" },
+      content: "inventory management software, stockout prevention, retail inventory alerts, reorder alerts system, inventory analytics, demand-aware inventory decisions" },
     
     /* Open Graph / Facebook */
     { property: "og:type",        content: "website" },
@@ -26,23 +26,23 @@ useHead({
     /* Twitter */
     { name: "twitter:card",        content: "summary_large_image" },
     { name: "twitter:title",       content: "SiloXR — Know what your business needs before it happens" },
-    { name: "twitter:description", content: "The decision engine that prevents stockouts and reduces waste for small retail businesses." },
+    { name: "twitter:description", content: "The decision engine that prevents stockouts and reduces waste across retail, distribution, food, pharmacy, and other inventory-led businesses." },
     { name: "twitter:image",       content: "/og-image.png" },
   ]
 })
 
 useSeoMeta({
-  title: "Inventory Management Software for Small Business | SiloXR",
-  description: "SiloXR helps small businesses prevent stockouts, protect cash flow, and know what to reorder before revenue is lost.",
-  keywords: "inventory management software, small business inventory software, stockout prevention, reorder alerts, demand forecasting for retail, inventory analytics",
+  title: "Inventory Management Software for Growing Businesses | SiloXR",
+  description: "SiloXR helps businesses prevent stockouts, protect cash flow, and know what to reorder before revenue is lost.",
+  keywords: "inventory management software, stockout prevention, reorder alerts, demand-aware inventory software, retail inventory analytics, business inventory intelligence",
   ogType: "website",
   ogUrl: canonicalUrl,
-  ogTitle: "Inventory Management Software for Small Business | SiloXR",
+  ogTitle: "Inventory Management Software for Growing Businesses | SiloXR",
   ogDescription: "Prevent stockouts before they cost you revenue. SiloXR turns messy inventory data into clear reorder decisions.",
   ogImage: ogImageUrl,
   twitterCard: "summary_large_image",
   twitterTitle: "SiloXR | Prevent Stockouts Before Revenue Is Lost",
-  twitterDescription: "Inventory decision software for small businesses that need better reorder timing, cash-flow protection, and demand-aware stock decisions.",
+  twitterDescription: "Inventory decision software for businesses that need better reorder timing, cash-flow protection, and demand-aware stock decisions.",
   twitterImage: ogImageUrl,
 })
 
@@ -74,7 +74,7 @@ const steps = [
 const faqs = [
   {
     question: "What does SiloXR do?",
-    answer: "SiloXR helps small businesses track inventory risk, predict likely stockouts, and decide what to reorder before sales are lost.",
+    answer: "SiloXR helps businesses track inventory risk, identify likely stockouts, and decide what to reorder before sales are lost.",
   },
   {
     question: "Who is SiloXR built for?",
@@ -86,7 +86,7 @@ const faqs = [
   },
   {
     question: "Can I start for free?",
-    answer: "Yes. SiloXR offers a free tier for small businesses getting started with a limited number of products.",
+    answer: "Yes. SiloXR offers a free tier for businesses getting started with a limited number of products.",
   },
 ]
 
@@ -118,7 +118,7 @@ useHead({
             price: "0",
             priceCurrency: "USD",
           },
-          description: "Inventory decision software for small businesses that helps prevent stockouts and improve reorder timing.",
+          description: "Inventory decision software for businesses that helps prevent stockouts and improve reorder timing.",
           url: canonicalUrl,
         },
         {
@@ -167,7 +167,7 @@ useHead({
           <span class="landing__headline-accent">before they happen</span>
         </h1>
         <p class="landing__sub">
-          Most small businesses lose 15% of their revenue to out-of-stock items. 
+          Businesses lose revenue every week to out-of-stock items. 
           SiloXR predicts your stock risks and tells you exactly what to reorder 
           to keep your profit growing—even with messy data.
         </p>

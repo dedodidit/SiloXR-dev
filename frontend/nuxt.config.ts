@@ -41,7 +41,7 @@ export default defineNuxtConfig({
       charset: "utf-8",
       meta: [
         { name: "viewport",    content: "width=device-width, initial-scale=1" },
-        { name: "description", content: "SiloXR helps small businesses prevent stockouts, protect cash flow, and make better inventory decisions before revenue is lost." },
+        { name: "description", content: "SiloXR helps businesses prevent stockouts, protect cash flow, and make better inventory decisions before revenue is lost." },
         { name: "format-detection", content: "telephone=no" },
         { name: "theme-color", content: "#534AB7" },
         { property: "og:site_name", content: "SiloXR" },

@@ -1,7 +1,7 @@
 {
   "name": "SiloXR",
   "short_name": "SiloXR",
-  "description": "SiloXR helps small businesses prevent stock outs and make better inventory decisions before revenue is lost.",
+  "description": "SiloXR helps businesses prevent stock outs and make better inventory decisions before revenue is lost.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f3ef",
