@@ -8,92 +8,117 @@ const ogImageUrl = `${siteUrl}/og-image.svg`
 
 const problemPoints = [
   {
-    title: "Customers leave empty-handed",
+    title: "Stockouts = lost revenue",
     description:
-      "You only realize you are out of a best-seller when a customer asks for it. That is revenue lost instantly.",
+      "Customers leave when products are unavailable and rarely return.",
   },
   {
-    title: "Your cash is tied up in the wrong products",
+    title: "Overstock = trapped cash",
     description:
-      "You overstock slow-moving items while fast-moving products run out.",
+      "Money sits in slow-moving products instead of fueling growth.",
   },
   {
-    title: "You rely on guesswork",
+    title: "Guesswork = inconsistent decisions",
     description:
-      "Manual counts and intuition lead to costly mistakes. One bad reorder can wipe out your margin.",
+      "Manual tracking leads to costly errors and missed opportunities.",
   },
-]
-
-const systemSteps = [
-  "Collects your sales and inventory data",
-  "Learns demand patterns over time",
-  "Predicts stockout risks and revenue loss",
-  "Recommends exactly what action to take",
 ]
 
 const valuePoints = [
   {
-    title: "Stop losing sales",
-    description: "Know exactly when stock will run out days in advance.",
+    title: "Prevent stockouts",
+    description: "Know exactly when products will run out before it happens.",
   },
   {
-    title: "Protect your cash flow",
-    description: "Avoid tying money down in slow-moving products.",
+    title: "Improve cash flow",
+    description: "Stop overbuying slow-moving inventory.",
   },
   {
-    title: "Turn messy data into clarity",
-    description: "No perfect spreadsheets required. SiloXR works with what you already have.",
+    title: "Make faster decisions",
+    description: "Get clear daily actions instead of analyzing spreadsheets.",
   },
   {
     title: "Operate without interruption",
-    description: "Log sales and stock offline. Sync and analyze when you are back online.",
+    description: "Log and track inventory even without internet.",
   },
   {
-    title: "Get instant alerts",
-    description: "Receive alert notifications when products enter risk zones.",
-  },
-  {
-    title: "Improve every day",
-    description: "The more you use SiloXR, the smarter and more accurate it becomes.",
+    title: "Stay informed in real-time",
+    description: "Receive alerts when products enter risk zones.",
   },
 ]
 
 const differentiators = [
   {
-    title: "Zero Data Perfection Required",
-    description: "Most tools fail with messy data. SiloXR is built to find patterns in it.",
+    title: "Works with messy data",
+    description: "No perfect systems required.",
   },
   {
     title: "Built for real operations",
-    description: "Fast, mobile, and offline-first, designed for the shop floor.",
+    description: "Fast, mobile, offline-first.",
   },
   {
-    title: "Focused on profit, not reports",
-    description: "No dashboards you ignore. Just clear daily actions that make or save money.",
+    title: "Focused on decisions, not dashboards",
+    description: "No complex reports, just clear actions.",
   },
 ]
 
 const startSteps = [
   {
     number: "1",
-    title: "Connect your stock",
-    description: "Upload your product list via CSV, Excel, or even a photo.",
+    title: "Upload your stock",
+    description: "CSV, Excel, or photo.",
   },
   {
     number: "2",
-    title: "Log a few sales",
-    description: "Record transactions in seconds, even without internet.",
+    title: "Record a few sales",
+    description: "Quick and simple.",
   },
   {
     number: "3",
     title: "See your risk",
-    description: "SiloXR identifies products trending toward stockouts.",
+    description: "Identify products trending toward stockout.",
   },
   {
     number: "4",
     title: "Take action",
-    description: "Get a daily Restock or Hold list to maximize profit.",
+    description: "Follow daily Restock or Hold recommendations.",
   },
+]
+
+const operatingSteps = [
+  {
+    number: "1",
+    title: "Capture data",
+    description: "Sales and stock are recorded, even offline.",
+  },
+  {
+    number: "2",
+    title: "Analyze demand patterns",
+    description: "SiloXR identifies trends and changes in product movement.",
+  },
+  {
+    number: "3",
+    title: "Predict risk",
+    description: "Detects when products are likely to run out.",
+  },
+  {
+    number: "4",
+    title: "Recommend actions",
+    description: "Clear Restock or Hold decisions based on real data.",
+  },
+]
+
+const proofSignals = [
+  "N12,400 revenue at risk this week",
+  "Stockout expected in about 2 days",
+  "Demand trending +15% above normal",
+]
+
+const financialImpactPoints = [
+  "Reduce stockouts and missed sales",
+  "Improve availability of high-demand products",
+  "Free up cash tied in slow-moving inventory",
+  "Make consistent, data-backed decisions",
 ]
 
 const industries = [
@@ -109,41 +134,36 @@ const faqs = [
   {
     question: "What does SiloXR do?",
     answer:
-      "SiloXR predicts inventory risk, identifies potential stockouts, and recommends what to reorder to protect revenue.",
-  },
-  {
-    question: "Who is SiloXR for?",
-    answer:
-      "Retailers, pharmacies, food businesses, wholesalers, and operators who need simple, accurate stock decisions without complex systems.",
+      "It predicts inventory risk and recommends what to reorder to prevent lost sales.",
   },
   {
     question: "Do I need perfect data?",
     answer:
-      "No. SiloXR is designed to work with imperfect data and improve accuracy over time.",
+      "No. It works with imperfect data and improves over time.",
   },
   {
     question: "Can I start for free?",
     answer:
-      "Yes. You can use SiloXR for free with up to 5 products.",
+      "Yes, free for up to 5 products.",
   },
 ]
 
 useSeoMeta({
   title: "SiloXR | The Inventory Decision Engine",
   description:
-    "Stop losing revenue to stockouts before they happen. SiloXR analyzes sales patterns, detects stock risks, and tells you exactly what to reorder.",
+    "Stop losing revenue to stockouts before they happen. SiloXR analyzes sales patterns and demand trends to predict stock risks and tell you what to reorder.",
   keywords:
-    "inventory decision engine, stockout prevention software, reorder recommendations, inventory analytics, demand intelligence, inventory risk alerts",
+    "inventory decision engine, stockout prevention software, reorder recommendations, demand trends, inventory risk alerts, demand forecasting inventory, reorder decision software",
   ogType: "website",
   ogUrl: canonicalUrl,
   ogTitle: "SiloXR | The Inventory Decision Engine",
   ogDescription:
-    "SiloXR turns sales and inventory data into clear reorder actions, stockout risk signals, and profit-protecting decisions.",
+    "Stop losing revenue to stockouts before they happen. SiloXR analyzes sales patterns and demand trends to predict stock risks and tell you what to reorder.",
   ogImage: ogImageUrl,
   twitterCard: "summary_large_image",
-  twitterTitle: "SiloXR | Stop Losing Revenue to Stockouts",
+  twitterTitle: "SiloXR | The Inventory Decision Engine",
   twitterDescription:
-    "Analyze sales patterns, detect stock risks, and know exactly what to reorder before profit is lost.",
+    "Analyze sales patterns and demand trends to predict stock risks and know exactly what to reorder before profit is lost.",
   twitterImage: ogImageUrl,
 })
 
@@ -176,7 +196,7 @@ useHead({
             priceCurrency: "USD",
           },
           description:
-            "Inventory decision engine that detects stock risks and recommends what to reorder to protect revenue.",
+            "Inventory decision engine that analyzes sales patterns and demand trends to predict stock risks and recommend what to reorder.",
           url: canonicalUrl,
         },
         {
@@ -231,7 +251,7 @@ useHead({
           Stop losing revenue to stockouts before they happen.
         </p>
         <p class="landing__sub">
-          SiloXR analyzes your sales patterns, detects stock risks, and tells you exactly what to reorder to protect profit, even with messy data.
+          SiloXR analyzes your sales patterns and demand trends to predict stock risks and tells you exactly what to reorder to protect your profit.
         </p>
 
         <div class="landing__hero-ctas">
@@ -240,7 +260,7 @@ useHead({
         </div>
 
         <p class="landing__hero-fine">
-          Free for up to 5 products. Setup takes 2 minutes. No credit card required.
+          Free for up to 5 products · Setup in 2 minutes · No credit card required
         </p>
       </div>
 
@@ -266,9 +286,23 @@ useHead({
       </div>
     </section>
 
+    <section class="landing__section landing__section--proof">
+      <div class="landing__section-inner">
+        <div class="landing__proof surface">
+          <div>
+            <span class="landing__eyebrow">Decisions you can act on immediately</span>
+          </div>
+          <div class="landing__proof-list">
+            <div v-for="item in proofSignals" :key="item" class="landing__proof-item">{{ item }}</div>
+          </div>
+          <div class="landing__proof-action">Recommended action: Restock now</div>
+        </div>
+      </div>
+    </section>
+
     <section class="landing__section landing__section--problem">
       <div class="landing__section-inner">
-        <h2 class="landing__section-title">You are losing money every day if...</h2>
+        <h2 class="landing__section-title">Inventory mistakes quietly kill profit</h2>
         <div class="landing__cards-grid">
           <article v-for="item in problemPoints" :key="item.title" class="landing__problem-card surface">
             <h3 class="landing__card-title">{{ item.title }}</h3>
@@ -279,34 +313,53 @@ useHead({
     </section>
 
     <section class="landing__section">
-      <div class="landing__system surface">
-        <div>
-          <span class="landing__eyebrow">How SiloXR works</span>
-          <h2 class="landing__section-title landing__section-title--left">Not just stock tracking, a decision engine</h2>
-          <p class="landing__section-copy">
-            SiloXR is not just stock tracking. It is a decision engine that turns raw operating data into clear action.
-          </p>
-          <p class="landing__section-copy">
-            So instead of reacting late, you act early with clarity and confidence.
-          </p>
+      <div class="landing__shift surface">
+        <span class="landing__eyebrow">From tracking inventory to making decisions</span>
+        <h2 class="landing__section-title landing__section-title--left">Most tools show you what happened.</h2>
+        <p class="landing__shift-accent">SiloXR tells you what to do next.</p>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="landing__section landing__section--soft">
+      <div class="landing__section-inner">
+        <h2 class="landing__section-title">A simple system that turns data into decisions</h2>
+        <div class="landing__steps">
+          <article v-for="step in operatingSteps" :key="step.number" class="landing__step surface">
+            <span class="landing__step-num">{{ step.number }}</span>
+            <h3 class="landing__step-title">{{ step.title }}</h3>
+            <p class="landing__step-desc">{{ step.description }}</p>
+          </article>
         </div>
-        <div class="landing__system-list">
-          <div v-for="step in systemSteps" :key="step" class="landing__system-item">
-            <span class="landing__system-dot" aria-hidden="true" />
-            <span>{{ step }}</span>
-          </div>
+        <p class="landing__section-note">No perfect data required. Accuracy improves as you use it.</p>
+      </div>
+    </section>
+
+    <section class="landing__section">
+      <div class="landing__section-inner">
+        <h2 class="landing__section-title">From data to profit-driven decisions</h2>
+        <div class="landing__cards-grid">
+          <article v-for="item in valuePoints" :key="item.title" class="landing__value-card surface">
+            <h3 class="landing__card-title">{{ item.title }}</h3>
+            <p class="landing__card-copy">{{ item.description }}</p>
+          </article>
         </div>
       </div>
     </section>
 
     <section class="landing__section landing__section--soft">
       <div class="landing__section-inner">
-        <h2 class="landing__section-title">From data to decisions in seconds</h2>
-        <div class="landing__cards-grid">
-          <article v-for="item in valuePoints" :key="item.title" class="landing__value-card surface">
-            <h3 class="landing__card-title">{{ item.title }}</h3>
-            <p class="landing__card-copy">{{ item.description }}</p>
-          </article>
+        <h2 class="landing__section-title">What this means for your business</h2>
+        <div class="landing__impact surface">
+          <div class="landing__impact-list">
+            <div v-for="item in financialImpactPoints" :key="item" class="landing__impact-item">
+              {{ item }}
+            </div>
+          </div>
+          <div class="landing__impact-copy">
+            <p>Every stockout is lost revenue.</p>
+            <p>Every overstock is idle capital.</p>
+            <p><strong>SiloXR helps you minimize both.</strong></p>
+          </div>
         </div>
       </div>
     </section>
@@ -323,9 +376,9 @@ useHead({
       </div>
     </section>
 
-    <section id="how-it-works" class="landing__section landing__section--soft">
+    <section class="landing__section">
       <div class="landing__section-inner">
-        <h2 class="landing__section-title">Get your first reorder decision in under 10 minutes</h2>
+        <h2 class="landing__section-title">Get your first decision in under 10 minutes</h2>
         <div class="landing__steps">
           <article v-for="step in startSteps" :key="step.number" class="landing__step surface">
             <span class="landing__step-num">{{ step.number }}</span>
@@ -336,36 +389,12 @@ useHead({
       </div>
     </section>
 
-    <section class="landing__section">
-      <div class="landing__upload surface">
-        <div class="landing__upload-copy">
-          <span class="landing__eyebrow">Already have a stock list?</span>
-          <h2 class="landing__section-title landing__section-title--left">Stop manual entry. Upload your existing data and get instant insights.</h2>
-          <p class="landing__section-copy">
-            Bring in your current records and move straight to decision-ready inventory intelligence.
-          </p>
-          <div class="landing__upload-formats">
-            <span class="landing__format-badge">CSV</span>
-            <span class="landing__format-badge">Excel</span>
-            <span class="landing__format-badge">PDF</span>
-          </div>
-        </div>
-        <div class="landing__upload-actions">
-          <NuxtLink to="/auth/signup" class="btn btn-primary">Create Free Account</NuxtLink>
-          <NuxtLink to="/upload" class="btn btn-secondary">Open Upload Flow</NuxtLink>
-        </div>
-      </div>
-    </section>
-
     <section class="landing__section landing__section--statement">
       <div class="landing__section-inner">
         <div class="landing__statement">
-          <span class="landing__eyebrow">Built as a decision intelligence layer</span>
+          <span class="landing__eyebrow">Built to grow with your business</span>
           <p class="landing__statement-copy">
-            SiloXR sits on top of your existing operations and turns raw data into clear, profit-driven actions.
-          </p>
-          <p class="landing__statement-note">
-            No ERP required. No perfect data needed. Just better decisions, every day.
+            Whether you manage a single shop or multiple locations, SiloXR adapts and improves as your operations expand.
           </p>
         </div>
       </div>
@@ -398,10 +427,7 @@ useHead({
       <div class="landing__final-inner">
         <h2 class="landing__final-title">Stop losing sales. Start making smarter decisions.</h2>
         <p class="landing__final-copy">
-          Join operators using SiloXR to protect revenue and optimize inventory daily.
-        </p>
-        <p class="landing__final-note">
-          Free for up to 5 products. No credit card required.
+          Join operators using SiloXR to protect revenue and improve inventory decisions every day.
         </p>
         <NuxtLink to="/auth/signup" class="btn btn-primary btn-lg landing__final-btn">
           Create Free Account
@@ -415,7 +441,7 @@ useHead({
         <div class="landing__footer-line">The Inventory Decision Engine</div>
       </div>
       <div class="landing__footer-meta">
-        <span>© 2026 SiloXR. All rights reserved.</span>
+        <span>© 2026 SiloXR</span>
         <a :href="SITE_CONTACT_MAILTO" class="landing__footer-link">{{ SITE_CONTACT_EMAIL }}</a>
       </div>
     </footer>
@@ -682,6 +708,10 @@ useHead({
   padding: 0 var(--page-pad) 80px;
 }
 
+.landing__section--proof {
+  padding-top: 0;
+}
+
 .landing__section--soft {
   background: color-mix(in srgb, var(--bg-card) 80%, transparent);
   border-top: 1px solid var(--border-subtle);
@@ -732,6 +762,45 @@ useHead({
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.landing__proof,
+.landing__shift,
+.landing__impact {
+  padding: 28px 30px;
+  border-radius: 26px;
+}
+
+.landing__proof {
+  display: grid;
+  gap: 18px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--purple) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-card) 92%, transparent));
+}
+
+.landing__proof-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.landing__proof-item,
+.landing__impact-item {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--purple) 14%, var(--border-subtle));
+  background: color-mix(in srgb, var(--purple) 5%, var(--bg-card));
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.landing__proof-action {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--purple-dark);
+}
+
 .landing__problem-card,
 .landing__value-card,
 .landing__diff-card,
@@ -767,6 +836,21 @@ useHead({
     linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-card) 92%, transparent));
 }
 
+.landing__shift {
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--purple) 12%, transparent), transparent 32%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-card) 92%, transparent));
+}
+
+.landing__shift-accent {
+  margin: 12px 0 0;
+  font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  color: var(--purple-dark);
+  font-weight: 800;
+}
+
 .landing__system-list {
   display: grid;
   gap: 12px;
@@ -800,6 +884,15 @@ useHead({
   gap: 16px;
 }
 
+.landing__section-note {
+  margin: 20px auto 0;
+  max-width: 56ch;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
 .landing__step {
   padding: 22px;
   border-radius: 22px;
@@ -829,43 +922,35 @@ useHead({
   margin: 10px 0 0;
 }
 
-.landing__upload {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  padding: 30px 32px;
-  border-radius: 28px;
+.landing__impact {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr);
+  gap: 18px;
   background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--purple) 10%, transparent), transparent 32%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--purple) 12%, transparent), transparent 38%),
     linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, transparent), color-mix(in srgb, var(--bg-card) 92%, transparent));
 }
 
-.landing__upload-actions {
-  display: flex;
-  flex-direction: column;
+.landing__impact-list {
+  display: grid;
   gap: 12px;
-  min-width: 220px;
 }
 
-.landing__upload-formats {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 18px;
+.landing__impact-copy {
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--purple) 6%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--purple) 14%, var(--border-subtle));
+  color: var(--text-2);
+  line-height: 1.7;
 }
 
-.landing__format-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--purple) 12%, transparent);
-  color: var(--purple);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.landing__impact-copy p {
+  margin: 0;
+}
+
+.landing__impact-copy p + p {
+  margin-top: 8px;
 }
 
 .landing__statement {
@@ -968,22 +1053,11 @@ useHead({
 @media (max-width: 1040px) {
   .landing__hero,
   .landing__system,
-  .landing__upload {
+  .landing__impact {
     grid-template-columns: 1fr;
   }
 
-  .landing__upload {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .landing__upload-actions {
-    min-width: 0;
-    width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
+  .landing__proof-list,
   .landing__cards-grid,
   .landing__steps,
   .landing__industry-grid {
@@ -1005,13 +1079,16 @@ useHead({
 
   .landing__cards-grid,
   .landing__steps,
-  .landing__industry-grid {
+  .landing__industry-grid,
+  .landing__proof-list {
     grid-template-columns: 1fr;
   }
 
   .landing__hero-card,
   .landing__system,
-  .landing__upload,
+  .landing__proof,
+  .landing__shift,
+  .landing__impact,
   .landing__problem-card,
   .landing__value-card,
   .landing__diff-card,

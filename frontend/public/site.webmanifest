@@ -1,7 +1,7 @@
 {
   "name": "SiloXR",
   "short_name": "SiloXR",
-  "description": "Stop losing revenue to stockouts before they happen. SiloXR analyzes sales patterns, detects stock risks, and tells you exactly what to reorder.",
+  "description": "SiloXR is the inventory decision engine that analyzes sales patterns and demand trends to predict stock risks and tell you exactly what to reorder.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f3ef",

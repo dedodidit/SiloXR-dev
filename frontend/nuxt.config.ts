@@ -41,7 +41,7 @@ export default defineNuxtConfig({
       charset: "utf-8",
       meta: [
         { name: "viewport",    content: "width=device-width, initial-scale=1" },
-        { name: "description", content: "Stop losing revenue to stockouts before they happen. SiloXR analyzes sales patterns, detects stock risks, and tells you exactly what to reorder." },
+        { name: "description", content: "SiloXR is the inventory decision engine that analyzes sales patterns and demand trends to predict stock risks and tell you exactly what to reorder." },
         { name: "format-detection", content: "telephone=no" },
         { name: "theme-color", content: "#534AB7" },
         { property: "og:site_name", content: "SiloXR" },
