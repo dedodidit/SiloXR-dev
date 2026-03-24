@@ -117,15 +117,6 @@ def _feature_denied_response(plan: str, feature_name: str, required_plan: str) -
 
 
 def _send_welcome_email(user, *, preferred_channel: str) -> bool:
-    from django.conf import settings as djsettings
-    from django.core.mail import EmailMultiAlternatives
-
-    if not getattr(user, "email", ""):
-        return False
-    if not getattr(djsettings, "EMAIL_HOST_USER", "") or not getattr(djsettings, "EMAIL_HOST_PASSWORD", ""):
-        logger.error("Welcome email skipped for %s because email settings are incomplete.", user.email)
-        return False
-
     next_step = (
         "Telegram was selected as your preferred channel. We will open your Telegram linking step immediately after signup."
         if preferred_channel == user.CHANNEL_TELEGRAM else
@@ -137,26 +128,94 @@ def _send_welcome_email(user, *, preferred_channel: str) -> bool:
         f"Welcome to SiloXR.\n\n"
         f"Your account has been created successfully.\n"
         f"{next_step}\n\n"
-        f"If you need help, reply to {djsettings.DEFAULT_FROM_EMAIL}."
+        f"If you need help, reply to {{from_email}}."
     )
     html_body = (
         f"<p>Hi {user.username},</p>"
         f"<p>Welcome to <strong>SiloXR</strong>.</p>"
         f"<p>Your account has been created successfully.</p>"
         f"<p>{next_step}</p>"
-        f"<p>If you need help, reply to {djsettings.DEFAULT_FROM_EMAIL}.</p>"
+        f"<p>If you need help, reply to {{from_email}}.</p>"
     )
+    return _send_account_email(
+        user,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        log_context="Welcome email",
+    )
+
+
+def _email_delivery_ready() -> tuple[bool, str]:
+    from django.conf import settings as djsettings
+
+    backend = getattr(djsettings, "EMAIL_BACKEND", "")
+    if not backend:
+        return False, "Email backend is not configured."
+    if backend == "django.core.mail.backends.smtp.EmailBackend":
+        missing = []
+        if not getattr(djsettings, "EMAIL_HOST", ""):
+            missing.append("EMAIL_HOST")
+        if not getattr(djsettings, "EMAIL_HOST_USER", ""):
+            missing.append("EMAIL_HOST_USER")
+        if not getattr(djsettings, "EMAIL_HOST_PASSWORD", ""):
+            missing.append("EMAIL_HOST_PASSWORD")
+        if missing:
+            return False, f"Email settings are incomplete: {', '.join(missing)}."
+    return True, "Email delivery is configured."
+
+
+def _send_account_email(user, *, subject: str, text_body: str, html_body: str | None = None, log_context: str = "Account email") -> bool:
+    from django.conf import settings as djsettings
+    from django.core.mail import EmailMultiAlternatives
+
+    if not getattr(user, "email", ""):
+        logger.error("%s skipped because user has no email.", log_context)
+        return False
+
+    ready, detail = _email_delivery_ready()
+    if not ready:
+        logger.error("%s skipped for %s because %s", log_context, user.email, detail)
+        return False
 
     message = EmailMultiAlternatives(
         subject=subject,
-        body=text_body,
+        body=text_body.format(from_email=djsettings.DEFAULT_FROM_EMAIL),
         from_email=djsettings.DEFAULT_FROM_EMAIL,
         to=[user.email],
         reply_to=[djsettings.DEFAULT_FROM_EMAIL],
     )
-    message.attach_alternative(html_body, "text/html")
+    if html_body:
+        message.attach_alternative(html_body.format(from_email=djsettings.DEFAULT_FROM_EMAIL), "text/html")
     message.send(fail_silently=False)
     return True
+
+
+def _send_login_email(user) -> bool:
+    if not getattr(user, "email_notifications_enabled", False):
+        return False
+
+    logged_in_at = timezone.localtime(timezone.now()).strftime("%b %d, %Y at %I:%M %p %Z")
+    subject = "SiloXR login alert"
+    text_body = (
+        f"Hi {user.username},\n\n"
+        f"We noticed a successful login to your SiloXR account on {logged_in_at}.\n\n"
+        f"If this was you, no action is needed.\n"
+        f"If this was not you, reset your password immediately or reply to {{from_email}}."
+    )
+    html_body = (
+        f"<p>Hi {user.username},</p>"
+        f"<p>We noticed a successful login to your <strong>SiloXR</strong> account on {logged_in_at}.</p>"
+        f"<p>If this was you, no action is needed.</p>"
+        f"<p>If this was not you, reset your password immediately or reply to {{from_email}}.</p>"
+    )
+    return _send_account_email(
+        user,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        log_context="Login email",
+    )
 
 
 # ── Products ───────────────────────────────────────────────────────────────────
@@ -1319,6 +1378,60 @@ def mark_notifications_read(request):
     ).update(is_read=True, read_at=timezone.now())
     return Response({"marked_read": updated})
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_test_email(request):
+    """
+    POST /api/v1/notifications/test-email/
+    Send a test email to the signed-in user so delivery can be verified live.
+    """
+    ready, detail = _email_delivery_ready()
+    if not ready:
+        return Response(
+            {"ready": False, "sent": False, "detail": detail},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    if not getattr(request.user, "email", ""):
+        return Response(
+            {"ready": True, "sent": False, "detail": "Your account does not have an email address yet."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    sent = False
+    try:
+        sent = _send_account_email(
+            request.user,
+            subject="SiloXR test email",
+            text_body=(
+                f"Hi {request.user.username},\n\n"
+                "This is a test email from SiloXR.\n\n"
+                "If you received this message, email delivery is working for your account."
+            ),
+            html_body=(
+                f"<p>Hi {request.user.username},</p>"
+                "<p>This is a test email from <strong>SiloXR</strong>.</p>"
+                "<p>If you received this message, email delivery is working for your account.</p>"
+            ),
+            log_context="Test email",
+        )
+    except Exception as exc:
+        logger.error("Test email failed for %s: %s", request.user.email, exc, exc_info=True)
+        return Response(
+            {"ready": True, "sent": False, "detail": "The email provider rejected the test send."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    return Response(
+        {
+            "ready": True,
+            "sent": sent,
+            "detail": "Test email sent successfully." if sent else "Test email could not be sent.",
+            "recipient": request.user.email,
+        }
+    )
+
 # backend/apps/api/views.py  — add to bottom
 
 @api_view(["POST"])
@@ -1489,7 +1602,19 @@ def login(request):
         )
 
     refresh = RefreshToken.for_user(user)
-    return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+    login_email_sent = False
+    try:
+        login_email_sent = _send_login_email(user)
+    except Exception as exc:
+        logger.error("Login email failed for %s: %s", user.email, exc, exc_info=True)
+
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "login_email_sent": login_email_sent,
+        }
+    )
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])

@@ -1,6 +1,7 @@
 # backend/apps/api/tests/test_api.py
 
 from datetime import timedelta
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.test import override_settings
@@ -408,3 +409,58 @@ class TestRegistrationAndUpload(APITestBase):
         })
 
         self.assertNotEqual(resp.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@siloxr.com",
+    )
+    def test_register_sends_welcome_email_when_delivery_is_ready(self):
+        resp = self.client.post("/api/v1/auth/register/", {
+            "username": "mailer",
+            "email": "mailer@example.com",
+            "password": "SecurePass123!",
+            "business_name": "Mailer Ltd",
+            "business_type": "retail",
+            "country": "ghana",
+            "terms_accepted": True,
+            "terms_version": "test-v1",
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp.data["welcome_email_sent"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Welcome to SiloXR")
+
+
+class TestAuthEmailDelivery(APITestBase):
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@siloxr.com",
+    )
+    def test_login_sends_email_when_enabled(self):
+        resp = self.client.post("/api/v1/auth/login/", {
+            "identifier": "free",
+            "password": "pass",
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data["login_email_sent"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "SiloXR login alert")
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@siloxr.com",
+    )
+    def test_authenticated_user_can_send_test_email(self):
+        self.auth_free()
+
+        resp = self.client.post("/api/v1/notifications/test-email/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data["ready"])
+        self.assertTrue(resp.data["sent"])
+        self.assertEqual(resp.data["recipient"], self.free_user.email)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "SiloXR test email")
