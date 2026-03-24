@@ -126,7 +126,7 @@ const industries = [
   "Food & Beverage",
   "Pharmacies",
   "Wholesale & Distribution",
-  "Mini-Supermarkets",
+  "Supermarkets",
   "Hardware & Tools",
 ]
 
@@ -134,17 +134,22 @@ const faqs = [
   {
     question: "What does SiloXR do?",
     answer:
-      "It predicts inventory risk and recommends what to reorder to prevent lost sales.",
+      "SiloXR helps businesses track inventory risk, identify likely stockouts, and decide what to reorder before sales are lost.",
+  },
+  {
+    question: "Who is SiloXR built for?",
+    answer:
+      "SiloXR is designed for retail shops, pharmacies, food businesses, wholesalers, supermarkets, and other operators who need simple stock decisions without heavy ERP software.",
   },
   {
     question: "Do I need perfect data?",
     answer:
-      "No. It works with imperfect data and improves over time.",
+      "No. SiloXR is built to work with imperfect sales and stock logs, then improve decision quality as more data is recorded over time.",
   },
   {
     question: "Can I start for free?",
     answer:
-      "Yes, free for up to 5 products.",
+      "Yes. SiloXR offers a free tier for businesses getting started with a limited number of products.",
   },
 ]
 

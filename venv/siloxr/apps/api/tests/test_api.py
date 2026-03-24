@@ -8,6 +8,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.billing.enums import PlanType
+from apps.billing.models import Business
 from apps.core.models import NigeriaBaselineProduct
 from apps.inventory.models import BurnRate, DecisionLog, ForecastSnapshot, Product
 from apps.inventory.events import EventProcessor
@@ -350,6 +352,12 @@ class TestRegistrationAndUpload(APITestBase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["country"], "ghana")
         self.assertEqual(resp.data["currency"], "GHS")
+
+        business = Business.objects.get(owner__username="global-owner")
+        self.assertEqual(business.name, "Global Foods Ltd")
+        self.assertEqual(business.country, "GH")
+        self.assertEqual(business.currency, "GHS")
+        self.assertEqual(business.active_subscription.plan, PlanType.FREE)
 
     def test_free_uploads_over_1mb_are_rejected(self):
         self.auth_free()

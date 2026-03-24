@@ -323,6 +323,10 @@ useHead({ title: "Create account - SiloXR" })
 .field__input-wrap {
   position: relative;
 }
+
+.field__input-wrap .field__input {
+  padding-right: 72px;
+}
 .field__label {
   font-size: 12px;
   font-weight: 600;

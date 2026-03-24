@@ -88,19 +88,9 @@ def _normalize_currency(value: str) -> str:
 
 
 def _currency_for_country(country: str) -> str:
-    normalized = _normalize_country(country)
-    mapping = {
-        "nigeria": "NGN",
-        "ghana": "GHS",
-        "kenya": "KES",
-        "south africa": "ZAR",
-        "united kingdom": "GBP",
-        "united states": "USD",
-        "canada": "CAD",
-        "india": "INR",
-        "uae": "AED",
-    }
-    return mapping.get(normalized, "USD")
+    from apps.billing.services import PricingService
+
+    return PricingService.get_currency(country)
 
 
 # ── Products ───────────────────────────────────────────────────────────────────
@@ -1284,6 +1274,24 @@ def register(request):
         terms_version=terms_version,
     )
 
+    try:
+        from apps.billing.enums import PlanType
+        from apps.billing.models import Business, Subscription
+
+        business = Business.objects.create(
+            owner=user,
+            name=business_name or username,
+            country=country,
+            currency=currency,
+        )
+        Subscription.objects.create(
+            business=business,
+            plan=PlanType.FREE,
+            active=True,
+        )
+    except Exception as exc:
+        logger.error("Business profile provisioning failed for %s: %s", user.username, exc, exc_info=True)
+
     telegram_link = ""
     telegram_bot_user = ""
     if telegram_requested or preferred_channel == User.CHANNEL_TELEGRAM:
@@ -1922,6 +1930,13 @@ def profile(request):
             if field == "country":
                 user.currency = _currency_for_country(value)
     user.save()
+
+    business = getattr(user, "business_profile", None)
+    if business is not None:
+        business.name = user.business_name or business.name
+        business.country = user.country or business.country
+        business.currency = user.currency or business.currency
+        business.save()
     return Response({"status": "updated"})
 
 

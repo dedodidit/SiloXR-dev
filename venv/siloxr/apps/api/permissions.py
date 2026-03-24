@@ -2,6 +2,9 @@
 
 from rest_framework.permissions import BasePermission, IsAuthenticated
 
+from apps.billing.enums import FeatureFlag
+from apps.billing.services import FeatureGateService
+
 
 class IsOwner(BasePermission):
     """
@@ -31,7 +34,7 @@ class IsProUser(BasePermission):
         return (
             request.user
             and request.user.is_authenticated
-            and request.user.is_pro
+            and FeatureGateService.has_access(getattr(request.user, "current_plan", request.user.tier), FeatureFlag.VIEW_FORECAST)
         )
 
 

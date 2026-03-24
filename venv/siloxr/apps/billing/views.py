@@ -12,7 +12,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .enums import PlanType
 from .models import PaymentTransaction
+from .services import PricingService
 
 
 def _paystack_request(path: str, payload: dict | None = None) -> dict:
@@ -47,18 +49,27 @@ def _paystack_request(path: str, payload: dict | None = None) -> dict:
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def billing_plan_catalog(request):
-    amount_naira = Decimal(str(settings.PAYSTACK_PRO_MONTHLY_NAIRA)).quantize(Decimal("0.01"))
+    country = getattr(getattr(request.user, "business_profile", None), "country", "") or getattr(request.user, "country", "")
+    plans = []
+    for plan in (PlanType.FREE, PlanType.CORE, PlanType.PRO, PlanType.ENTERPRISE):
+        quote = PricingService.get_price(country, plan)
+        plans.append(
+            {
+                "key": f"{plan}_monthly",
+                "label": plan.title(),
+                "interval": "month",
+                "currency": quote.currency,
+                "amount": float(quote.amount) if quote.amount is not None else None,
+                "amount_usd_reference": float(quote.amount_usd_reference) if quote.amount_usd_reference is not None else None,
+                "pricing_tier": quote.tier,
+                "contact_sales": plan == PlanType.ENTERPRISE,
+            }
+        )
     return Response(
         {
-            "plans": [
-                {
-                    "key": "pro_monthly",
-                    "label": "Pro",
-                    "interval": "month",
-                    "currency": "NGN",
-                    "amount_naira": float(amount_naira),
-                }
-            ]
+            "country": PricingService.normalize_country(country),
+            "currency": PricingService.get_currency(country),
+            "plans": plans,
         }
     )
 
@@ -66,23 +77,33 @@ def billing_plan_catalog(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def initialize_paystack_payment(request):
-    plan = request.data.get("plan", "pro_monthly")
-    if plan != "pro_monthly":
+    plan = str(request.data.get("plan", "pro_monthly")).strip().lower()
+    plan_map = {
+        "core_monthly": PlanType.CORE,
+        "pro_monthly": PlanType.PRO,
+    }
+    selected_plan = plan_map.get(plan)
+    if selected_plan is None:
         return Response({"detail": "Unsupported billing plan."}, status=status.HTTP_400_BAD_REQUEST)
 
-    amount_naira = Decimal(str(settings.PAYSTACK_PRO_MONTHLY_NAIRA)).quantize(Decimal("0.01"))
-    amount_kobo = int(amount_naira * 100)
+    country = getattr(getattr(request.user, "business_profile", None), "country", "") or getattr(request.user, "country", "")
+    quote = PricingService.get_price(country, selected_plan)
+    if quote.amount is None:
+        return Response({"detail": "This plan is handled through contact sales."}, status=status.HTTP_400_BAD_REQUEST)
+
+    amount_value = Decimal(str(quote.amount)).quantize(Decimal("0.01"))
+    amount_minor = int(amount_value * 100)
     reference = f"SILOXR-{uuid.uuid4().hex[:16].upper()}"
 
     payload = {
         "email": request.user.email,
-        "amount": amount_kobo,
-        "currency": "NGN",
+        "amount": amount_minor,
+        "currency": quote.currency,
         "reference": reference,
         "callback_url": settings.PAYSTACK_CALLBACK_URL,
         "metadata": {
             "user_id": str(request.user.id),
-            "plan": plan,
+            "plan": selected_plan,
             "business_name": request.user.business_name or request.user.username,
         },
     }
@@ -102,9 +123,9 @@ def initialize_paystack_payment(request):
             "user": request.user,
             "provider": PaymentTransaction.PROVIDER_PAYSTACK,
             "plan_key": plan,
-            "currency": "NGN",
-            "amount_naira": amount_naira,
-            "amount_kobo": amount_kobo,
+            "currency": quote.currency,
+            "amount_naira": amount_value,
+            "amount_kobo": amount_minor,
             "status": PaymentTransaction.STATUS_INITIALIZED,
             "authorization_url": data.get("authorization_url", ""),
             "access_code": data.get("access_code", ""),
@@ -117,8 +138,8 @@ def initialize_paystack_payment(request):
             "authorization_url": data.get("authorization_url"),
             "access_code": data.get("access_code"),
             "reference": reference,
-            "amount_naira": float(amount_naira),
-            "currency": "NGN",
+            "amount": float(amount_value),
+            "currency": quote.currency,
         }
     )
 
@@ -148,10 +169,16 @@ def verify_paystack_payment(request):
         transaction.status = PaymentTransaction.STATUS_SUCCESS
         transaction.paid_at = timezone.now()
 
-        current_anchor = request.user.tier_expires_at if request.user.is_pro and request.user.tier_expires_at else timezone.now()
-        request.user.tier = request.user.TIER_PRO
+        current_anchor = request.user.tier_expires_at if request.user.is_paid and request.user.tier_expires_at else timezone.now()
+        selected_plan = PlanType.PRO if transaction.plan_key == "pro_monthly" else PlanType.CORE
+        request.user.tier = selected_plan
         request.user.tier_expires_at = current_anchor + timedelta(days=30)
         request.user.save(update_fields=["tier", "tier_expires_at"])
+
+        business = getattr(request.user, "business_profile", None)
+        if business is not None:
+            business.subscriptions.filter(active=True).update(active=False)
+            business.subscriptions.create(plan=selected_plan, active=True)
     elif gateway_status in {"abandoned", "failed"}:
         transaction.status = gateway_status
     else:

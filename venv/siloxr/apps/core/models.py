@@ -5,6 +5,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
 
+from apps.billing.enums import PlanType
+
 class User(AbstractUser):
     """
     Extended user. Subscription tier controls engine access.
@@ -48,27 +50,46 @@ class User(AbstractUser):
     currency = models.CharField(max_length=10, blank=True, default="USD")
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
     terms_version = models.CharField(max_length=40, blank=True, default="")
-    TIER_FREE = "free"
-    TIER_PRO = "pro"
-    TIER_CHOICES = [
-        (TIER_FREE, "Free"),
-        (TIER_PRO, "Pro"),
-    ]
+    TIER_FREE = PlanType.FREE
+    TIER_CORE = PlanType.CORE
+    TIER_PRO = PlanType.PRO
+    TIER_ENTERPRISE = PlanType.ENTERPRISE
+    TIER_CHOICES = PlanType.choices
 
-    tier = models.CharField(max_length=10, choices=TIER_CHOICES, default=TIER_FREE)
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, default=TIER_FREE)
     tier_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "core_user"
 
     @property
-    def is_pro(self) -> bool:
+    def current_plan(self) -> str:
         from django.utils import timezone
-        if self.tier != self.TIER_PRO:
-            return False
-        if self.tier_expires_at and self.tier_expires_at < timezone.now():
+
+        business = getattr(self, "business_profile", None)
+        if business is not None:
+            subscription = business.active_subscription
+            if subscription and subscription.active:
+                return subscription.plan
+        if (
+            self.tier in {self.TIER_CORE, self.TIER_PRO, self.TIER_ENTERPRISE}
+            and self.tier_expires_at
+            and self.tier_expires_at < timezone.now()
+        ):
+            return self.TIER_FREE
+        return self.tier or self.TIER_FREE
+
+    @property
+    def is_pro(self) -> bool:
+        current_plan = self.current_plan
+        if current_plan not in {self.TIER_PRO, self.TIER_ENTERPRISE}:
             return False
         return True
+
+    @property
+    def is_paid(self) -> bool:
+        current_plan = self.current_plan
+        return current_plan in {self.TIER_CORE, self.TIER_PRO, self.TIER_ENTERPRISE}
 
     def __str__(self) -> str:
         return self.email
