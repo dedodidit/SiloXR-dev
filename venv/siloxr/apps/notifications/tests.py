@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.inventory.models import Product
@@ -12,7 +12,7 @@ from apps.notifications.reminders import (
     maybe_send_automated_product_update_reminder,
     send_product_update_reminders,
 )
-from apps.notifications.dispatch import dispatch_dashboard_insights
+from apps.notifications.dispatch import dispatch_dashboard_insights, _send_email_message, notification_channel_status
 from apps.notifications.business_briefs import resolve_business_brief_type, send_business_briefs
 from apps.notifications.router import NotificationRouter
 
@@ -50,6 +50,7 @@ class ProductUpdateReminderTests(TestCase):
 
     @patch("apps.notifications.dispatch.send_mail")
     def test_route_product_update_reminder_prefers_email(self, send_mail_mock):
+        send_mail_mock.return_value = 1
         user = self._make_user()
         product = self._make_product(user)
 
@@ -58,7 +59,8 @@ class ProductUpdateReminderTests(TestCase):
         self.assertTrue(result.in_app)
         self.assertTrue(result.email)
         self.assertFalse(result.telegram)
-        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_IN_APP).count(), 1)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_EMAIL).count(), 1)
         self.assertTrue(
             NotificationThrottle.objects.filter(user=user, channel="upd_reminder").exists()
         )
@@ -81,6 +83,7 @@ class ProductUpdateReminderTests(TestCase):
 
     @patch("apps.notifications.dispatch.send_mail")
     def test_send_product_update_reminders_respects_cadence(self, send_mail_mock):
+        send_mail_mock.return_value = 1
         user = self._make_user()
         self._make_product(user, sku="SKU-ST-1")
 
@@ -89,11 +92,13 @@ class ProductUpdateReminderTests(TestCase):
 
         self.assertEqual(first.users_notified, 1)
         self.assertEqual(second.users_notified, 0)
-        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_IN_APP).count(), 1)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_EMAIL).count(), 1)
         send_mail_mock.assert_called_once()
 
     @patch("apps.notifications.dispatch.send_mail")
     def test_maybe_send_automated_product_update_reminder_debounces_checks(self, send_mail_mock):
+        send_mail_mock.return_value = 1
         user = self._make_user()
         self._make_product(user, sku="SKU-AUTO-1")
 
@@ -110,11 +115,13 @@ class ProductUpdateReminderTests(TestCase):
 
         self.assertIsNotNone(first)
         self.assertIsNone(second)
-        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_IN_APP).count(), 1)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_EMAIL).count(), 1)
         send_mail_mock.assert_called_once()
 
     @patch("apps.notifications.dispatch.send_mail")
     def test_dispatch_dashboard_insights_routes_once_per_fingerprint(self, send_mail_mock):
+        send_mail_mock.return_value = 1
         user = self._make_user()
 
         contextual = [
@@ -141,11 +148,43 @@ class ProductUpdateReminderTests(TestCase):
 
         self.assertEqual(first, 2)
         self.assertEqual(second, 0)
-        self.assertEqual(Notification.objects.filter(user=user).count(), 2)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_IN_APP).count(), 2)
+        self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_EMAIL).count(), 2)
         self.assertEqual(send_mail_mock.call_count, 2)
 
         html_message = send_mail_mock.call_args.kwargs.get("html_message", "")
         self.assertIn("/dashboard#decisions", html_message)
+
+    @override_settings(
+        EMAIL_HOST="smtp.gmail.com",
+        EMAIL_PORT=587,
+        EMAIL_HOST_USER="hello@example.com",
+        EMAIL_HOST_PASSWORD="secret",
+        DEFAULT_FROM_EMAIL="SiloXR <hello@example.com>",
+    )
+    @patch("apps.notifications.dispatch.send_mail", return_value=1)
+    def test_send_email_message_returns_false_when_send_fails(self, send_mail_mock):
+        user = self._make_user()
+        send_mail_mock.return_value = 0
+
+        delivered = _send_email_message(user, "Test", "Body")
+
+        self.assertFalse(delivered)
+
+    @override_settings(
+        EMAIL_HOST="smtp.gmail.com",
+        EMAIL_PORT=587,
+        EMAIL_HOST_USER="hello@example.com",
+        EMAIL_HOST_PASSWORD="secret",
+        DEFAULT_FROM_EMAIL="SiloXR <hello@example.com>",
+    )
+    def test_notification_channel_status_flags_ready_email(self):
+        user = self._make_user()
+
+        status = notification_channel_status(user)
+
+        self.assertTrue(status["email"]["ready"])
+        self.assertEqual(status["recommended_channel"], "email")
 
     def test_resolve_business_brief_type_uses_business_windows(self):
         opening = datetime(2026, 3, 23, 7, 30, tzinfo=dt_timezone.utc)

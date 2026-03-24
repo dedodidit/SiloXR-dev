@@ -1294,6 +1294,18 @@ def notifications(request):
     return Response(data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def notification_status(request):
+    """
+    GET /api/v1/notifications/status/
+    Returns whether each delivery channel is actually ready for this user.
+    """
+    from apps.notifications.dispatch import notification_channel_status
+
+    return Response(notification_channel_status(request.user))
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def mark_notifications_read(request):

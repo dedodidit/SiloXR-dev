@@ -135,6 +135,66 @@ def dispatch_dashboard_brief(user, summary_data, brief_type: str) -> bool:
     return result.any_delivered
 
 
+def notification_channel_status(user) -> dict:
+    preferred = getattr(user, "preferred_channel", "email")
+    email_address = getattr(user, "email", "") or ""
+    telegram_profile = getattr(user, "telegram_profile", None)
+    telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
+    email_configured = _email_configured()
+    email_enabled = bool(getattr(user, "email_notifications_enabled", True) and email_address)
+    email_ready = email_enabled and email_configured
+    telegram_enabled = bool(getattr(user, "telegram_enabled", False))
+    telegram_ready = telegram_enabled and telegram_linked
+
+    def _last_sent(channel: str) -> str | None:
+        sent_at = (
+            Notification.objects
+            .filter(user=user, channel=channel)
+            .order_by("-created_at")
+            .values_list("created_at", flat=True)
+            .first()
+        )
+        return sent_at.isoformat() if sent_at else None
+
+    issues = []
+    if preferred == "email" and not email_ready:
+        if not email_enabled:
+            issues.append("Email delivery is disabled on your profile.")
+        elif not email_configured:
+            issues.append("Email delivery is not configured on the server.")
+    if preferred == "telegram" and not telegram_ready:
+        issues.append("Telegram is selected but not fully linked yet.")
+    if not email_ready and not telegram_ready:
+        issues.append("Only in-app notifications are currently guaranteed.")
+
+    recommended_channel = "email" if email_ready else "telegram" if telegram_ready else "in_app"
+
+    return {
+        "preferred_channel": preferred,
+        "recommended_channel": recommended_channel,
+        "issues": issues,
+        "email": {
+            "enabled": email_enabled,
+            "configured": email_configured,
+            "ready": email_ready,
+            "address": email_address,
+            "last_sent_at": _last_sent(Notification.CHANNEL_EMAIL),
+        },
+        "telegram": {
+            "enabled": telegram_enabled,
+            "linked": telegram_linked,
+            "ready": telegram_ready,
+            "username": getattr(telegram_profile, "username", "") if telegram_profile else "",
+            "last_sent_at": _last_sent(Notification.CHANNEL_TELEGRAM),
+        },
+        "whatsapp": {
+            "ready": False,
+            "enabled": False,
+            "issue": "WhatsApp delivery is temporarily disabled.",
+        },
+    }
+
+
 def _build_title(decision: DecisionLog) -> str:
     prefix = {
         DecisionLog.ALERT_CRITICAL: "Urgent",
@@ -371,15 +431,25 @@ def _send_email(user, decision: DecisionLog, title: str, body: str) -> bool:
 def _send_email_message(user, title: str, body: str, html_message: str | None = None) -> bool:
     if not getattr(user, "email", ""):
         return False
+    if not _email_configured():
+        logger.error("Email skipped for %s because email delivery is not configured.", user.email)
+        return False
 
-    send_mail(
-        subject=title,
-        message=body,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@siloxr.local"),
-        recipient_list=[user.email],
-        html_message=html_message,
-        fail_silently=True,
-    )
+    try:
+        sent = send_mail(
+            subject=title,
+            message=body,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@siloxr.local"),
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+    except Exception as exc:
+        logger.error("Email delivery failed for %s: %s", user.email, exc, exc_info=True)
+        return False
+    if sent <= 0:
+        logger.error("Email delivery returned zero messages sent for %s.", user.email)
+        return False
     return True
 
 
@@ -420,6 +490,32 @@ def _dashboard_url(path: str = "/dashboard") -> str:
     if not path.startswith("/"):
         path = f"/{path}"
     return f"{frontend}{path}"
+
+
+def _email_configured() -> bool:
+    backend = str(getattr(settings, "EMAIL_BACKEND", "") or "")
+    if backend.endswith(("console.EmailBackend", "locmem.EmailBackend", "filebased.EmailBackend")):
+        return True
+    required = [
+        getattr(settings, "EMAIL_HOST", ""),
+        getattr(settings, "EMAIL_PORT", ""),
+        getattr(settings, "DEFAULT_FROM_EMAIL", ""),
+    ]
+    auth_required = [getattr(settings, "EMAIL_HOST_USER", ""), getattr(settings, "EMAIL_HOST_PASSWORD", "")]
+    return all(required) and all(auth_required)
+
+
+def record_channel_delivery(user, channel: str, title: str, body: str, confidence: float = 0.5, decision=None) -> None:
+    Notification.objects.create(
+        user=user,
+        decision=decision,
+        channel=channel,
+        title=title[:255],
+        body=body,
+        confidence=confidence,
+        is_read=True,
+        read_at=timezone.now(),
+    )
 
 
 def _build_cta_html(label: str, url: str) -> str:

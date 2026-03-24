@@ -269,6 +269,26 @@ class TestTelegramLinkEndpoint(APITestBase):
         self.assertEqual(resp.data["detail"], "Telegram linking is not configured yet.")
 
 
+class TestNotificationStatusEndpoint(APITestBase):
+
+    @override_settings(
+        EMAIL_HOST="smtp.gmail.com",
+        EMAIL_PORT=587,
+        EMAIL_HOST_USER="hello@example.com",
+        EMAIL_HOST_PASSWORD="secret",
+        DEFAULT_FROM_EMAIL="SiloXR <hello@example.com>",
+    )
+    def test_notification_status_reports_email_readiness(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/notifications/status/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["preferred_channel"], "email")
+        self.assertTrue(resp.data["email"]["ready"])
+        self.assertEqual(resp.data["recommended_channel"], "email")
+
+
 class TestOfflineSync(APITestBase):
 
     def test_bulk_sync_creates_events(self):

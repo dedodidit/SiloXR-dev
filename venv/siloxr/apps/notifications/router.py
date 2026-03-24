@@ -69,7 +69,7 @@ class NotificationRouter:
         Route a DecisionLog to all appropriate channels.
         Returns RoutingResult with delivery status per channel.
         """
-        from apps.notifications.dispatch import _build_title, _build_body, _send_email
+        from apps.notifications.dispatch import _build_title, _build_body, _send_email, record_channel_delivery
         from apps.notifications.models import Notification
 
         user   = product.owner
@@ -97,6 +97,7 @@ class NotificationRouter:
                 profile = user.telegram_profile
                 if send_decision_alert(profile.chat_id, decision, product):
                     result.telegram = True
+                    record_channel_delivery(user, Notification.CHANNEL_TELEGRAM, title, body, decision.confidence_score, decision)
                     logger.info("Telegram delivered for %s → %s", user.username, decision.action)
             except Exception as exc:
                 logger.error("Telegram routing error: %s", exc, exc_info=True)
@@ -106,8 +107,11 @@ class NotificationRouter:
         # ── 3. Email (fallback or primary channel) ───────────────────────
         if self._should_email(user, decision, result):
             try:
-                _send_email(user, decision, title, body)
-                result.email = True
+                if _send_email(user, decision, title, body):
+                    result.email = True
+                    record_channel_delivery(user, Notification.CHANNEL_EMAIL, title, body, decision.confidence_score, decision)
+                else:
+                    result.skipped.append("email")
             except Exception as exc:
                 logger.error("Email routing error: %s", exc, exc_info=True)
                 result.skipped.append("email")
@@ -124,7 +128,7 @@ class NotificationRouter:
         Route a non-decision insight through the user's active notification
         preferences while always keeping an in-app record.
         """
-        from apps.notifications.dispatch import _build_insight_email_html, _dashboard_url, _send_email_message
+        from apps.notifications.dispatch import _build_insight_email_html, _dashboard_url, _send_email_message, record_channel_delivery
         from apps.notifications.models import Notification
         from apps.notifications.telegram import send_insight
 
@@ -159,6 +163,7 @@ class NotificationRouter:
                     },
                 ):
                     result.telegram = True
+                    record_channel_delivery(user, Notification.CHANNEL_TELEGRAM, title[:255], body, confidence)
             except Exception as exc:
                 logger.error("Telegram insight routing error: %s", exc, exc_info=True)
                 result.skipped.append("telegram")
@@ -170,8 +175,11 @@ class NotificationRouter:
                 if dashboard_url:
                     email_body = f"{email_body}\n\nOpen dashboard: {dashboard_url}"
                 html = _build_insight_email_html(user, title[:255], body, "/dashboard")
-                _send_email_message(user, title[:255], email_body, html)
-                result.email = True
+                if _send_email_message(user, title[:255], email_body, html):
+                    result.email = True
+                    record_channel_delivery(user, Notification.CHANNEL_EMAIL, title[:255], email_body, confidence)
+                else:
+                    result.skipped.append("email")
             except Exception as exc:
                 logger.error("Email insight routing error: %s", exc, exc_info=True)
                 result.skipped.append("email")
@@ -182,7 +190,7 @@ class NotificationRouter:
         """
         Route dashboard-derived insights that are not tied to a single product.
         """
-        from apps.notifications.dispatch import _build_insight_email_html, _dashboard_url, _send_email_message
+        from apps.notifications.dispatch import _build_insight_email_html, _dashboard_url, _send_email_message, record_channel_delivery
         from apps.notifications.models import Notification
         from apps.notifications.telegram import send_insight
 
@@ -218,6 +226,7 @@ class NotificationRouter:
                     },
                 ):
                     result.telegram = True
+                    record_channel_delivery(user, Notification.CHANNEL_TELEGRAM, title[:255], body, confidence)
             except Exception as exc:
                 logger.error("Telegram dashboard insight routing error: %s", exc, exc_info=True)
                 result.skipped.append("telegram")
@@ -229,8 +238,11 @@ class NotificationRouter:
                 if dashboard_url:
                     email_body = f"{email_body}\n\nOpen dashboard: {dashboard_url}"
                 html = _build_insight_email_html(user, title[:255], body, dashboard_path)
-                _send_email_message(user, title[:255], email_body, html)
-                result.email = True
+                if _send_email_message(user, title[:255], email_body, html):
+                    result.email = True
+                    record_channel_delivery(user, Notification.CHANNEL_EMAIL, title[:255], email_body, confidence)
+                else:
+                    result.skipped.append("email")
             except Exception as exc:
                 logger.error("Email dashboard insight routing error: %s", exc, exc_info=True)
                 result.skipped.append("email")
@@ -241,7 +253,7 @@ class NotificationRouter:
         """
         Route a grouped start/end-of-business dashboard brief.
         """
-        from apps.notifications.dispatch import _dashboard_url, _send_email_message
+        from apps.notifications.dispatch import _dashboard_url, _send_email_message, record_channel_delivery
         from apps.notifications.models import Notification
         from apps.notifications.telegram import send_insight
 
@@ -278,6 +290,7 @@ class NotificationRouter:
                     },
                 ):
                     result.telegram = True
+                    record_channel_delivery(user, Notification.CHANNEL_TELEGRAM, title[:255], body, confidence)
             except Exception as exc:
                 logger.error("Telegram dashboard brief routing error: %s", exc, exc_info=True)
                 result.skipped.append("telegram")
@@ -288,8 +301,11 @@ class NotificationRouter:
                 dashboard_url = _dashboard_url(dashboard_path)
                 if dashboard_url and dashboard_url not in email_body:
                     email_body = f"{email_body}\n\nOpen dashboard: {dashboard_url}"
-                _send_email_message(user, title[:255], email_body, html)
-                result.email = True
+                if _send_email_message(user, title[:255], email_body, html):
+                    result.email = True
+                    record_channel_delivery(user, Notification.CHANNEL_EMAIL, title[:255], email_body, confidence)
+                else:
+                    result.skipped.append("email")
             except Exception as exc:
                 logger.error("Email dashboard brief routing error: %s", exc, exc_info=True)
                 result.skipped.append("email")
@@ -307,6 +323,7 @@ class NotificationRouter:
             _build_product_update_email_html,
             _build_product_update_title,
             _send_email_message,
+            record_channel_delivery,
         )
         from apps.notifications.models import Notification, NotificationThrottle
         from apps.notifications.telegram import send_product_update_reminder
@@ -352,6 +369,9 @@ class NotificationRouter:
             try:
                 if _send_email_message(user, title[:255], body, html):
                     result.email = True
+                    record_channel_delivery(user, Notification.CHANNEL_EMAIL, title[:255], body, 0.4)
+                else:
+                    result.skipped.append("email")
             except Exception as exc:
                 logger.error("Email reminder routing error: %s", exc, exc_info=True)
                 result.skipped.append("email")
