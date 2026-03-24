@@ -13,6 +13,8 @@ const emit = defineEmits<{
 }>()
 
 const { $api } = useNuxtApp()
+const router = useRouter()
+const route = useRoute()
 
 // ── Single source of truth: product ─────────────────────────────────
 const product = computed(() =>
@@ -51,7 +53,7 @@ const conf = computed(() =>
 // ── Messaging ───────────────────────────────────────────────────────
 const headline = computed(() => {
   if (!props.decision) {
-    return "Add a stock update to unlock predictions"
+    return product.value ? "Add a stock update to unlock predictions" : "Add your first product to unlock guidance"
   }
 
   if (revenue.value > 0) {
@@ -66,7 +68,10 @@ const headline = computed(() => {
 })
 
 const subline = computed(() => {
-  if (!props.decision) return null
+  if (!props.decision) {
+    if (product.value) return "Verify one live stock count to activate stronger signals for this product."
+    return "Start by creating a product, then record stock or sales so SiloXR can begin reading your operation."
+  }
 
   const d = days.value
   if (d != null && d <= 3) {
@@ -87,6 +92,7 @@ const ACTION_LABEL: Record<string, string> = {
 }
 
 const ctaLabel = computed(() => {
+  if (!props.decision && !product.value) return "Add first product"
   return ACTION_LABEL[derivedDecision.value.action] ?? 'Review'
 })
 
@@ -105,6 +111,11 @@ const handleCTA = async () => {
   if (decision.synthetic) {
     if (product.value?.id) {
       emit('focusProduct', product.value.id)
+      if (!route.path.startsWith('/workspace/product-operations')) {
+        await router.push('/workspace/product-operations')
+      }
+    } else {
+      await router.push('/onboarding')
     }
     return
   }

@@ -2,6 +2,7 @@
 const route = useRoute()
 const { $api } = useNuxtApp()
 const token = useCookie("siloxr_token")
+const { preference, initialize: initializeTourPreference } = useTourPreference()
 
 type TourStepDef = {
   target: string
@@ -187,6 +188,7 @@ const initializeRouteTour = () => {
   currentStep.value = 0
   sessionsCompleted.value = 0
 
+  if (preference.value !== "guided") return
   if (!routeKey.value || routeSessions.value.length === 0) return
 
   const completed = parseInt(localStorage.getItem(storageKeys.value.sessions) ?? "0", 10)
@@ -203,11 +205,17 @@ const initializeRouteTour = () => {
 
 onMounted(async () => {
   if (typeof window === "undefined") return
+  initializeTourPreference()
   await initializeUserKey()
   initializeRouteTour()
 })
 
 watch(routeKey, () => {
+  if (typeof window === "undefined") return
+  initializeRouteTour()
+})
+
+watch(preference, () => {
   if (typeof window === "undefined") return
   initializeRouteTour()
 })

@@ -5,7 +5,7 @@ import { formatMoney } from "../constants/markets"
 const { summary, loading, refresh, daysSinceSignup } = useDashboard()
 const dashboardRefreshTick = useState<number>("dashboard-refresh-tick", () => 0)
 const now = ref(new Date())
-const tourPreference = ref<"pending" | "skip">("pending")
+const { preference: tourPreference, initialize: initializeTourPreference, setPreference: setTourPreference } = useTourPreference()
 
 const displayName = computed(() => {
   const raw = String(summary.value?.user_context?.name ?? "").trim()
@@ -84,12 +84,7 @@ watch(dashboardRefreshTick, async () => {
 let clockTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
-  if (process.client) {
-    const stored = window.localStorage.getItem("siloxr-tour-choice")
-    if (stored === "skip") {
-      tourPreference.value = "skip"
-    }
-  }
+  initializeTourPreference()
   clockTimer = setInterval(() => {
     now.value = new Date()
   }, 60_000)
@@ -100,10 +95,11 @@ onUnmounted(() => {
 })
 
 function skipTour() {
-  tourPreference.value = "skip"
-  if (process.client) {
-    window.localStorage.setItem("siloxr-tour-choice", "skip")
-  }
+  setTourPreference("skip")
+}
+
+function startTour() {
+  setTourPreference("guided")
 }
 
 function formatNaira(value: number) {
@@ -187,12 +183,24 @@ function formatNaira(value: number) {
             <span class="dashboard-home__starter-meta">{{ uploadLimitCopy }}</span>
           </div>
 
-          <div v-if="showTourPrompt" class="dashboard-home__tour-actions">
-            <NuxtLink to="/onboarding" class="dashboard-home__tour-btn dashboard-home__tour-btn--primary">
-              Start tour
-            </NuxtLink>
-            <button type="button" class="dashboard-home__tour-btn dashboard-home__tour-btn--ghost" @click="skipTour">
-              Skip for now
+          <div v-if="showTourPrompt" class="dashboard-home__tour-choice" role="group" aria-label="Choose a guided tour or skip">
+            <button
+              type="button"
+              class="dashboard-home__tour-choice-card dashboard-home__tour-choice-card--primary"
+              @click="startTour"
+            >
+              <span class="dashboard-home__tour-choice-kicker">Guided path</span>
+              <strong>Take the quick tour</strong>
+              <span>See how SiloXR works, then jump into products and decisions.</span>
+            </button>
+            <button
+              type="button"
+              class="dashboard-home__tour-choice-card dashboard-home__tour-choice-card--secondary"
+              @click="skipTour"
+            >
+              <span class="dashboard-home__tour-choice-kicker">Direct setup</span>
+              <strong>Skip guides for now</strong>
+              <span>Go straight to adding products, sales, and stock signals yourself.</span>
             </button>
           </div>
 
@@ -458,38 +466,62 @@ function formatNaira(value: number) {
   margin-top: 14px;
 }
 
-.dashboard-home__tour-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.dashboard-home__tour-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   margin-top: 16px;
 }
 
-.dashboard-home__tour-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 14px;
-  border-radius: 14px;
+.dashboard-home__tour-choice-card {
+  display: grid;
+  gap: 6px;
+  min-height: 112px;
+  padding: 16px 17px;
+  border-radius: 18px;
   border: 1px solid transparent;
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
+  text-align: left;
   cursor: pointer;
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
 }
 
-.dashboard-home__tour-btn--primary {
-  background: var(--purple);
-  color: #fff;
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--purple) 18%, transparent);
+.dashboard-home__tour-choice-card strong {
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--text);
 }
 
-.dashboard-home__tour-btn--ghost {
-  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
-  border-color: color-mix(in srgb, var(--purple) 18%, var(--border-subtle));
-  color: var(--text);
+.dashboard-home__tour-choice-card span:last-child {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.dashboard-home__tour-choice-card--primary {
+  border-color: color-mix(in srgb, #2D7BD0 34%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #185FA5 18%, var(--bg-card)), color-mix(in srgb, #4AA3FF 22%, var(--bg-card)));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 48%, transparent),
+    0 14px 28px color-mix(in srgb, #185FA5 14%, transparent);
+}
+
+.dashboard-home__tour-choice-card--secondary {
+  border-color: color-mix(in srgb, #185FA5 18%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-card) 94%, transparent), color-mix(in srgb, #185FA5 8%, var(--bg-card)));
+}
+
+.dashboard-home__tour-choice-card:hover {
+  transform: translateY(-1px);
+}
+
+.dashboard-home__tour-choice-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #185FA5 78%, var(--text-2));
 }
 
 .dashboard-home__starter-eyebrow {
@@ -634,8 +666,8 @@ function formatNaira(value: number) {
     grid-template-columns: 1fr;
   }
 
-  .dashboard-home__tour-actions {
-    flex-direction: column;
+  .dashboard-home__tour-choice {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-home__status-signal {
