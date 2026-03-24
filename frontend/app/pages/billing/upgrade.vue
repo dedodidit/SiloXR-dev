@@ -3,24 +3,64 @@ import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../../constants/site"
 
 const { $api } = useNuxtApp()
 const route = useRoute()
+
+type BillingPlan = {
+  key: string
+  label: string
+  interval: string
+  currency: string
+  amount: number | null
+  amount_usd_reference: number | null
+  pricing_tier: string
+  contact_sales: boolean
+}
+
 const profile = ref<any>(null)
-const plans = ref<{ key: string; label: string; interval: string; currency: string; amount_naira: number }[]>([])
-const startingCheckout = ref(false)
+const plans = ref<BillingPlan[]>([])
+const pricingCountry = ref("")
+const pricingCurrency = ref("USD")
+const startingCheckout = ref("")
 const verifying = ref(false)
 const paymentMessage = ref("")
 const paymentError = ref("")
 
-const proPlan = computed(() => plans.value.find((plan) => plan.key === "pro_monthly") ?? null)
-const proPlanPriceLabel = computed(() => {
-  const amount = proPlan.value?.amount_naira
-  if (typeof amount !== "number") {
-    return "..."
-  }
-  return new Intl.NumberFormat("en-NG", {
+const featureMap: Record<string, string[]> = {
+  free: [
+    "Create products, stock counts, and sales records",
+    "Basic operational signals without quantified revenue views",
+    "Start with a free business workspace",
+  ],
+  core: [
+    "Revenue gap values and product-level demand gaps",
+    "Basic prioritization with clear actions",
+    "Decision layer access without forecast bands",
+  ],
+  pro: [
+    "Forecasting, trends, and confidence bands",
+    "Business Health and portfolio-level insights",
+    "Advanced intelligence layer access",
+  ],
+  enterprise: [
+    "Integrations and API access",
+    "Multi-location support",
+    "Contact-sales onboarding and custom rollout",
+  ],
+}
+
+const currentPlan = computed(() => String(profile.value?.tier || "free").toLowerCase())
+
+const formatPrice = (plan: BillingPlan) => {
+  if (plan.amount == null) return "Contact sales"
+  return new Intl.NumberFormat("en", {
     style: "currency",
-    currency: "NGN",
+    currency: plan.currency || pricingCurrency.value || "USD",
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(plan.amount)
+}
+
+const sortedPlans = computed(() => {
+  const order = ["free", "core", "pro", "enterprise"]
+  return [...plans.value].sort((a, b) => order.indexOf(a.label.toLowerCase()) - order.indexOf(b.label.toLowerCase()))
 })
 
 const loadProfile = async () => {
@@ -31,22 +71,22 @@ const loadProfile = async () => {
 
 const loadPlans = async () => {
   try {
-    const data = await $api<{ plans: { key: string; label: string; interval: string; currency: string; amount_naira: number }[] }>("/billing/plans/")
+    const data = await $api<{ country?: string; currency?: string; plans?: BillingPlan[] }>("/billing/plans/")
     plans.value = Array.isArray(data?.plans) ? data.plans : []
+    pricingCountry.value = String(data?.country || "")
+    pricingCurrency.value = String(data?.currency || "USD")
   } catch {}
 }
 
-const startUpgrade = async () => {
-  startingCheckout.value = true
+const startCheckout = async (planKey: string) => {
+  startingCheckout.value = planKey
   paymentError.value = ""
   paymentMessage.value = ""
 
   try {
-    const data = await $api<{
-      authorization_url: string
-    }>("/billing/paystack/initialize/", {
+    const data = await $api<{ authorization_url: string }>("/billing/paystack/initialize/", {
       method: "POST",
-      body: { plan: "pro_monthly" },
+      body: { plan: planKey },
     })
 
     if (process.client && data?.authorization_url) {
@@ -55,7 +95,7 @@ const startUpgrade = async () => {
   } catch (e: any) {
     paymentError.value = e?.data?.detail ?? "We could not start checkout."
   } finally {
-    startingCheckout.value = false
+    startingCheckout.value = ""
   }
 }
 
@@ -64,11 +104,9 @@ const verifyPayment = async (reference: string) => {
   paymentError.value = ""
 
   try {
-    const data = await $api<{
-      verified: boolean
-      message: string
-    }>(`/billing/paystack/verify/?reference=${encodeURIComponent(reference)}`)
-
+    const data = await $api<{ verified: boolean; message: string }>(
+      `/billing/paystack/verify/?reference=${encodeURIComponent(reference)}`
+    )
     paymentMessage.value = data.message
     await loadProfile()
   } catch (e: any) {
@@ -94,51 +132,92 @@ useHead({ title: "SiloXR - Billing" })
   <div class="bill page-pad">
     <section class="bill__hero surface">
       <p class="bill__eyebrow">Billing</p>
-      <h1 class="bill__title">Choose how often SiloXR works for you.</h1>
+      <h1 class="bill__title">Choose the decision layer that fits your business.</h1>
       <p class="bill__sub">
-        Free users keep full product intelligence and decisions. Pro unlocks unlimited refresh frequency and higher-touch delivery.
+        Pricing is localized by market tier with safe defaults. Start free, move into Core for quantified decision support, or unlock the full intelligence layer with Pro.
       </p>
       <p class="bill__contact">
         Billing help:
         <a :href="SITE_CONTACT_MAILTO" class="bill__contact-link">{{ SITE_CONTACT_EMAIL }}</a>
       </p>
+      <p class="bill__context">
+        Market: <strong>{{ pricingCountry || "Default tier" }}</strong>
+        <span>·</span>
+        Currency: <strong>{{ pricingCurrency }}</strong>
+      </p>
     </section>
 
     <div class="bill__grid">
-      <article class="bill__card surface">
-        <p class="bill__plan">Free</p>
-        <h2 class="bill__price">Full access</h2>
-        <p class="bill__desc">All decisions, insights, forecasts, and products. Usage is controlled by refresh cadence.</p>
-        <ul class="bill__list">
-          <li>Decision stack and portfolio view</li>
-          <li>Telegram and email notifications</li>
-          <li>Industry bootstrap from day zero</li>
-        </ul>
-      </article>
+      <article
+        v-for="plan in sortedPlans"
+        :key="plan.key"
+        class="bill__card surface"
+        :class="{
+          'bill__card--featured': plan.label.toLowerCase() === 'pro',
+          'bill__card--active': currentPlan === plan.label.toLowerCase(),
+        }"
+      >
+        <div class="bill__card-top">
+          <p class="bill__plan">{{ plan.label }}</p>
+          <span v-if="currentPlan === plan.label.toLowerCase()" class="bill__badge">Current</span>
+        </div>
 
-      <article class="bill__card bill__card--pro surface">
-        <p class="bill__plan">Pro</p>
-        <h2 class="bill__price">{{ proPlanPriceLabel }} / month</h2>
-        <p class="bill__desc">For teams that want SiloXR running continuously instead of on a managed cadence.</p>
+        <h2 class="bill__price">
+          {{ formatPrice(plan) }}
+          <span v-if="plan.amount != null" class="bill__interval">/ {{ plan.interval }}</span>
+        </h2>
+
+        <p class="bill__desc">
+          Tier {{ plan.pricing_tier }} pricing in {{ plan.currency }}.
+          <span v-if="plan.amount_usd_reference != null">Based on a {{ plan.amount_usd_reference }} USD reference.</span>
+        </p>
+
         <ul class="bill__list">
-          <li>Unlimited refresh and decision polling</li>
-          <li>WhatsApp delivery for high-confidence alerts</li>
-          <li>Priority portfolio and feedback loops</li>
+          <li v-for="item in featureMap[plan.label.toLowerCase()] || []" :key="item">{{ item }}</li>
         </ul>
-        <button class="bill__cta" :disabled="startingCheckout || verifying" @click="startUpgrade">
-          {{ startingCheckout ? "Starting checkout..." : "Upgrade with Paystack" }}
+
+        <button
+          v-if="plan.label.toLowerCase() === 'core' || plan.label.toLowerCase() === 'pro'"
+          class="bill__cta"
+          :disabled="startingCheckout === plan.key || verifying || currentPlan === plan.label.toLowerCase()"
+          @click="startCheckout(plan.key)"
+        >
+          {{
+            currentPlan === plan.label.toLowerCase()
+              ? "Current plan"
+              : startingCheckout === plan.key
+                ? "Starting checkout..."
+                : `Upgrade to ${plan.label}`
+          }}
         </button>
-        <NuxtLink to="/profile" class="bill__link">Manage notification channels</NuxtLink>
+
+        <a
+          v-else-if="plan.contact_sales"
+          :href="SITE_CONTACT_MAILTO"
+          class="bill__cta bill__cta--ghost"
+        >
+          Contact sales
+        </a>
+
+        <span v-else class="bill__cta bill__cta--muted">Included</span>
       </article>
     </div>
 
     <section class="bill__status surface">
       <p class="bill__status-label">Current plan</p>
-      <strong class="bill__status-value">{{ profile?.tier?.toUpperCase?.() || "FREE" }}</strong>
+      <strong class="bill__status-value">{{ currentPlan.toUpperCase() }}</strong>
       <p class="bill__status-sub">
-        {{ profile?.is_pro ? "Unlimited decision refresh is active." : "You still have full access. Upgrade only if you need higher frequency and premium channels." }}
+        {{
+          currentPlan === "free"
+            ? "Free includes the data layer and basic signals. Upgrade when you need quantified decisions or the intelligence layer."
+            : currentPlan === "core"
+              ? "Core is active. Quantified decision support is available for your business."
+              : currentPlan === "pro"
+                ? "Pro is active. Forecasting, business health, and portfolio intelligence are available."
+                : "Enterprise access is active."
+        }}
       </p>
-      <p v-if="verifying" class="bill__note">Verifying your Paystack payment...</p>
+      <p v-if="verifying" class="bill__note">Verifying your payment...</p>
       <p v-if="paymentMessage" class="bill__note bill__note--ok">{{ paymentMessage }}</p>
       <p v-if="paymentError" class="bill__note bill__note--err">{{ paymentError }}</p>
     </section>
@@ -151,20 +230,25 @@ useHead({ title: "SiloXR - Billing" })
 .bill__eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); }
 .bill__title { margin-top: 8px; font-size: clamp(28px, 5vw, 44px); line-height: 1.05; letter-spacing: -0.04em; color: var(--text); }
 .bill__sub { margin-top: 10px; max-width: 760px; color: var(--text-3); line-height: 1.6; }
-.bill__contact { margin-top: 12px; color: var(--text-3); }
+.bill__contact, .bill__context { margin-top: 12px; color: var(--text-3); }
+.bill__context { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .bill__contact-link { color: var(--purple); font-weight: 700; text-decoration: none; }
 .bill__contact-link:hover { text-decoration: underline; }
-.bill__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.bill__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
 .bill__card { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
-.bill__card--pro { border-color: rgba(83,74,183,.18); box-shadow: 0 10px 30px rgba(83,74,183,.10); }
+.bill__card--featured { border-color: rgba(83,74,183,.22); box-shadow: 0 10px 30px rgba(83,74,183,.10); }
+.bill__card--active { outline: 2px solid color-mix(in srgb, var(--purple) 28%, transparent); }
+.bill__card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bill__badge { padding: 5px 9px; border-radius: 999px; background: color-mix(in srgb, var(--purple) 12%, transparent); color: var(--purple); font-size: 11px; font-weight: 700; }
 .bill__plan { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); }
 .bill__price { font-size: 28px; letter-spacing: -0.03em; color: var(--text); }
-.bill__desc { color: var(--text-3); line-height: 1.6; }
+.bill__interval { font-size: 14px; color: var(--text-4); font-weight: 600; }
+.bill__desc { color: var(--text-3); line-height: 1.6; min-height: 66px; }
 .bill__list { margin: 0; padding-left: 18px; color: var(--text-2); display: flex; flex-direction: column; gap: 8px; }
 .bill__cta { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; padding: 12px 14px; border-radius: 14px; background: var(--purple); color: #fff; text-decoration: none; font-weight: 700; border: none; cursor: pointer; }
 .bill__cta:disabled { opacity: .65; cursor: not-allowed; }
-.bill__link { color: var(--purple); font-weight: 600; text-decoration: none; }
-.bill__link:hover { text-decoration: underline; }
+.bill__cta--ghost { background: color-mix(in srgb, var(--purple) 12%, transparent); color: var(--purple); }
+.bill__cta--muted { background: color-mix(in srgb, var(--border-subtle) 90%, transparent); color: var(--text-3); cursor: default; }
 .bill__status { padding: 20px 24px; }
 .bill__status-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); }
 .bill__status-value { display: block; margin-top: 6px; font-size: 28px; color: var(--text); }
@@ -172,6 +256,9 @@ useHead({ title: "SiloXR - Billing" })
 .bill__note { margin-top: 12px; color: var(--text-3); }
 .bill__note--ok { color: var(--teal); }
 .bill__note--err { color: var(--red); }
+@media (max-width: 1100px) {
+  .bill__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 800px) {
   .bill__grid { grid-template-columns: 1fr; }
 }

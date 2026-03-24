@@ -93,6 +93,49 @@ def _currency_for_country(country: str) -> str:
     return PricingService.get_currency(country)
 
 
+def _send_welcome_email(user, *, preferred_channel: str) -> bool:
+    from django.conf import settings as djsettings
+    from django.core.mail import EmailMultiAlternatives
+
+    if not getattr(user, "email", ""):
+        return False
+    if not getattr(djsettings, "EMAIL_HOST_USER", "") or not getattr(djsettings, "EMAIL_HOST_PASSWORD", ""):
+        logger.error("Welcome email skipped for %s because email settings are incomplete.", user.email)
+        return False
+
+    next_step = (
+        "Telegram was selected as your preferred channel. We will open your Telegram linking step immediately after signup."
+        if preferred_channel == user.CHANNEL_TELEGRAM else
+        "Email updates are enabled for your account, so important SiloXR updates can reach you here."
+    )
+    subject = "Welcome to SiloXR"
+    text_body = (
+        f"Hi {user.username},\n\n"
+        f"Welcome to SiloXR.\n\n"
+        f"Your account has been created successfully.\n"
+        f"{next_step}\n\n"
+        f"If you need help, reply to {djsettings.DEFAULT_FROM_EMAIL}."
+    )
+    html_body = (
+        f"<p>Hi {user.username},</p>"
+        f"<p>Welcome to <strong>SiloXR</strong>.</p>"
+        f"<p>Your account has been created successfully.</p>"
+        f"<p>{next_step}</p>"
+        f"<p>If you need help, reply to {djsettings.DEFAULT_FROM_EMAIL}.</p>"
+    )
+
+    message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email=djsettings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+        reply_to=[djsettings.DEFAULT_FROM_EMAIL],
+    )
+    message.attach_alternative(html_body, "text/html")
+    message.send(fail_silently=False)
+    return True
+
+
 # ── Products ───────────────────────────────────────────────────────────────────
 
 # backend/apps/api/views.py  — update ProductViewSet
@@ -1033,7 +1076,7 @@ class DashboardViewSet(ViewSet):
             "products_low_confidence": low_conf,
             "critical_alerts": critical_count,
             "avg_confidence": round(avg_conf, 4),
-            "tier": user.tier,
+            "tier": user.current_plan,
             "is_pro": user.is_pro,
             "active_decisions": active_decisions,
             "top_priorities": top_priorities,
@@ -1045,7 +1088,7 @@ class DashboardViewSet(ViewSet):
                 "business_type": getattr(user, "business_type", "") or "General",
                 "country": getattr(user, "country", "") or "",
                 "currency": currency,
-                "tier": user.tier,
+                "tier": user.current_plan,
                 "is_pro": user.is_pro,
             },
             "journey_hint": journey_hint,
@@ -1304,29 +1347,9 @@ def register(request):
         except Exception as exc:
             logger.error("Telegram signup link generation failed for %s: %s", user.username, exc, exc_info=True)
 
+    welcome_email_sent = False
     try:
-        from django.conf import settings as djsettings
-        from django.core.mail import send_mail
-
-        if user.email:
-            next_step = (
-                "Telegram was selected as your preferred channel. We will open your Telegram linking step immediately after signup."
-                if preferred_channel == User.CHANNEL_TELEGRAM else
-                "Email updates are enabled for your account, so important SiloXR updates can reach you here."
-            )
-            send_mail(
-                subject="Welcome to SiloXR",
-                message=(
-                    f"Hi {user.username},\n\n"
-                    f"Welcome to SiloXR.\n\n"
-                    f"Your account has been created successfully.\n"
-                    f"{next_step}\n\n"
-                    f"If you need help, reply to {djsettings.DEFAULT_FROM_EMAIL}."
-                ),
-                from_email=djsettings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-                fail_silently=False,
-            )
+        welcome_email_sent = _send_welcome_email(user, preferred_channel=preferred_channel)
     except Exception as exc:
         logger.error("Welcome email failed for %s: %s", user.email, exc, exc_info=True)
 
@@ -1334,13 +1357,14 @@ def register(request):
         {
             "id": str(user.id),
             "username": user.username,
-            "tier": user.tier,
+            "tier": user.current_plan,
             "business_type": user.business_type,
             "country": user.country,
             "currency": user.currency,
             "preferred_channel": user.preferred_channel,
             "telegram_link": telegram_link,
             "telegram_bot_user": telegram_bot_user,
+            "welcome_email_sent": welcome_email_sent,
         },
         status=status.HTTP_201_CREATED,
     )
@@ -1395,7 +1419,7 @@ def me(request):
         "id":                           str(user.id),
         "username":                     user.username,
         "email":                        user.email,
-        "tier":                         user.tier,
+        "tier":                         user.current_plan,
         "is_pro":                       user.is_pro,
         "business_name":                user.business_name,
         "business_type":                user.business_type,
@@ -1887,7 +1911,7 @@ def profile(request):
             "whatsapp_critical_only":       False,
             "email_notifications_enabled":  user.email_notifications_enabled,
             "avatar_url":                   user.avatar_url,
-            "tier":                         user.tier,
+            "tier":                         user.current_plan,
             "is_pro":                       user.is_pro,
             "date_joined":                  user.date_joined,
             "telegram_download_url":        "https://telegram.org/dl",

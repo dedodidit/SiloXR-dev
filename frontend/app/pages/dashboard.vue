@@ -5,6 +5,7 @@ import { formatMoney } from "../constants/markets"
 const { summary, loading, refresh, daysSinceSignup } = useDashboard()
 const dashboardRefreshTick = useState<number>("dashboard-refresh-tick", () => 0)
 const now = ref(new Date())
+const tourPreference = ref<"pending" | "skip">("pending")
 
 const displayName = computed(() => {
   const raw = String(summary.value?.user_context?.name ?? "").trim()
@@ -35,8 +36,11 @@ const withinNewUserWindow = computed(() => Number(daysSinceSignup.value ?? 999) 
 const summaryCurrency = computed(() => String(summary.value?.user_context?.currency || "USD").toUpperCase())
 const uploadLimitCopy = computed(() =>
   summary.value?.is_pro
-    ? "Pro plan upload size is unlimited for CSV and Excel imports."
-    : "Free plan upload size is limited to 1MB. Upgrade to Pro for unlimited upload size."
+    ? "Unlimited file upload"
+    : "Free uploads up to 1MB"
+)
+const showTourPrompt = computed(() =>
+  Number(summary.value?.total_products ?? 0) === 0 && tourPreference.value === "pending"
 )
 const formatCurrency = (value: number) => formatMoney(value, summaryCurrency.value)
 const statusDirection = computed<"down" | "up" | "dash">(() => {
@@ -51,13 +55,13 @@ const statusLabel = computed(() => {
 })
 
 const statusTitle = computed(() => {
-  if (statusDirection.value === "dash") return "Business status"
+  if (statusDirection.value === "dash") return "Signals warming up"
   return statusDirection.value === "down" ? "Business pressure detected" : "Business operating steady"
 })
 
 const statusCopy = computed(() => {
   if (statusDirection.value === "dash") {
-    return "We are analyzing your business. The first three days stay neutral while early signals form."
+    return "Your first few days stay neutral while SiloXR builds a read on the business."
   }
   if (statusDirection.value === "down") {
     if (potentialWeeklyGap.value > 0) {
@@ -69,7 +73,7 @@ const statusCopy = computed(() => {
 })
 
 const statusMeta = computed(() => {
-  if (statusDirection.value === "dash") return "Early-stage orientation"
+  if (statusDirection.value === "dash") return "Early stage"
   return statusDirection.value === "down" ? "Attention recommended" : "Healthy posture"
 })
 
@@ -80,6 +84,12 @@ watch(dashboardRefreshTick, async () => {
 let clockTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
+  if (process.client) {
+    const stored = window.localStorage.getItem("siloxr-tour-choice")
+    if (stored === "skip") {
+      tourPreference.value = "skip"
+    }
+  }
   clockTimer = setInterval(() => {
     now.value = new Date()
   }, 60_000)
@@ -88,6 +98,13 @@ onMounted(() => {
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
 })
+
+function skipTour() {
+  tourPreference.value = "skip"
+  if (process.client) {
+    window.localStorage.setItem("siloxr-tour-choice", "skip")
+  }
+}
 
 function formatNaira(value: number) {
   return `₦${Math.round(value || 0).toLocaleString()}`
@@ -151,29 +168,42 @@ function formatNaira(value: number) {
           </div>
         </div>
         <p class="dashboard-home__subtitle">
-          Decision workspaces are ready. Start with the view that matches what you want to resolve next.
+          Choose your next move.
         </p>
 
         <div class="dashboard-home__starter dashboard-home__starter--hero">
           <div class="dashboard-home__starter-copy">
-            <p class="dashboard-home__starter-eyebrow">First actions</p>
-            <h2 class="dashboard-home__starter-title">Add your first products or import your existing records</h2>
+            <p class="dashboard-home__starter-eyebrow">{{ showTourPrompt ? "Get started" : "Quick actions" }}</p>
+            <h2 class="dashboard-home__starter-title">
+              {{ showTourPrompt ? "Would you like a quick tour?" : "Add products or import data" }}
+            </h2>
             <p class="dashboard-home__starter-text">
-              Start with manual entry if you want to set up a few products quickly, or import an Excel or CSV file if you already have operating data ready.
+              {{
+                showTourPrompt
+                  ? "Take a guided setup, or skip straight to adding your products and sales."
+                  : "Manual entry and file import are both ready."
+              }}
             </p>
             <span class="dashboard-home__starter-meta">{{ uploadLimitCopy }}</span>
           </div>
 
-          <div class="dashboard-home__starter-actions">
+          <div v-if="showTourPrompt" class="dashboard-home__tour-actions">
+            <NuxtLink to="/onboarding" class="dashboard-home__tour-btn dashboard-home__tour-btn--primary">
+              Start tour
+            </NuxtLink>
+            <button type="button" class="dashboard-home__tour-btn dashboard-home__tour-btn--ghost" @click="skipTour">
+              Skip for now
+            </button>
+          </div>
+
+          <div class="dashboard-home__starter-actions dashboard-home__starter-actions--compact">
             <NuxtLink to="/onboarding" class="dashboard-home__starter-card dashboard-home__starter-card--primary">
-              <span class="dashboard-home__starter-tag">Manual setup</span>
-              <strong>Add products and first sales manually</strong>
-              <span>Use guided setup to create products, verify stock, and record the first live operating signals.</span>
+              <span class="dashboard-home__starter-tag">Manual entry</span>
+              <strong>Add products</strong>
             </NuxtLink>
             <NuxtLink to="/upload" class="dashboard-home__starter-card dashboard-home__starter-card--secondary">
-              <span class="dashboard-home__starter-tag">File import</span>
-              <strong>Upload an Excel or CSV file</strong>
-              <span>Bring in existing product, stock, or sales history in one step instead of typing everything from scratch.</span>
+              <span class="dashboard-home__starter-tag">Import</span>
+              <strong>Upload CSV or Excel</strong>
             </NuxtLink>
           </div>
         </div>
@@ -424,6 +454,44 @@ function formatNaira(value: number) {
   margin-top: 16px;
 }
 
+.dashboard-home__starter-actions--compact {
+  margin-top: 14px;
+}
+
+.dashboard-home__tour-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.dashboard-home__tour-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.dashboard-home__tour-btn--primary {
+  background: var(--purple);
+  color: #fff;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--purple) 18%, transparent);
+}
+
+.dashboard-home__tour-btn--ghost {
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  border-color: color-mix(in srgb, var(--purple) 18%, var(--border-subtle));
+  color: var(--text);
+}
+
 .dashboard-home__starter-eyebrow {
   margin: 0 0 6px;
   font-size: 11px;
@@ -463,7 +531,7 @@ function formatNaira(value: number) {
 .dashboard-home__starter-card {
   display: grid;
   gap: 10px;
-  padding: 18px 18px 17px;
+  padding: 16px 18px;
   border-radius: 20px;
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--bg-card) 96%, transparent);
@@ -494,6 +562,10 @@ function formatNaira(value: number) {
 .dashboard-home__starter-card strong {
   font-size: 16px;
   line-height: 1.35;
+}
+
+.dashboard-home__starter-actions--compact .dashboard-home__starter-card {
+  gap: 6px;
 }
 
 .dashboard-home__starter-card span:last-child {
@@ -555,6 +627,10 @@ function formatNaira(value: number) {
 
   .dashboard-home__starter-actions {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-home__tour-actions {
+    flex-direction: column;
   }
 
   .dashboard-home__status-signal {
