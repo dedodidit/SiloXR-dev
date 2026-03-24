@@ -1,6 +1,7 @@
 # backend/apps/api/tests/test_api.py
 
 from datetime import timedelta
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.test import override_settings
 from django.utils import timezone
@@ -329,3 +330,53 @@ class TestOfflineSync(APITestBase):
         self.assertEqual(resp.status_code, status.HTTP_207_MULTI_STATUS)
         self.assertEqual(resp.data["summary"]["succeeded"], 1)
         self.assertEqual(resp.data["summary"]["failed"],    1)
+
+
+class TestRegistrationAndUpload(APITestBase):
+
+    def test_register_persists_country_and_currency(self):
+        resp = self.client.post("/api/v1/auth/register/", {
+            "username": "global-owner",
+            "email": "global-owner@example.com",
+            "password": "SecurePass123!",
+            "business_name": "Global Foods Ltd",
+            "business_type": "retail",
+            "country": "ghana",
+            "currency": "GHS",
+            "terms_accepted": True,
+            "terms_version": "test-v1",
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["country"], "ghana")
+        self.assertEqual(resp.data["currency"], "GHS")
+
+    def test_free_uploads_over_1mb_are_rejected(self):
+        self.auth_free()
+        oversized = SimpleUploadedFile(
+            "sales.csv",
+            b"a" * (1024 * 1024 + 1),
+            content_type="text/csv",
+        )
+
+        resp = self.client.post("/api/v1/upload/", {
+            "file": oversized,
+            "default_event_type": "SALE",
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+    def test_pro_uploads_over_1mb_can_continue_to_validation(self):
+        self.auth_pro()
+        oversized = SimpleUploadedFile(
+            "sales.csv",
+            b"a" * (1024 * 1024 + 1),
+            content_type="text/csv",
+        )
+
+        resp = self.client.post("/api/v1/upload/", {
+            "file": oversized,
+            "default_event_type": "SALE",
+        })
+
+        self.assertNotEqual(resp.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)

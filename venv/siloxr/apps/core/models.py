@@ -44,6 +44,8 @@ class User(AbstractUser):
     telegram_enabled        = models.BooleanField(default=False)
     business_name = models.CharField(max_length=200, blank=True, default="")
     avatar_url    = models.URLField(blank=True, default="")
+    country = models.CharField(max_length=40, blank=True, default="")
+    currency = models.CharField(max_length=10, blank=True, default="USD")
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
     terms_version = models.CharField(max_length=40, blank=True, default="")
     TIER_FREE = "free"

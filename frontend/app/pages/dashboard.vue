@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DashboardSummary } from "../../types"
+import { formatMoney } from "../constants/markets"
 
 const { summary, loading, refresh, daysSinceSignup } = useDashboard()
 const dashboardRefreshTick = useState<number>("dashboard-refresh-tick", () => 0)
@@ -31,6 +32,16 @@ const potentialWeeklyGap = computed(() =>
 )
 const observedRisk = computed(() => Number(summary.value?.revenue_at_risk_total ?? 0))
 const withinNewUserWindow = computed(() => Number(daysSinceSignup.value ?? 999) < 3)
+const summaryCurrency = computed(() => String(summary.value?.user_context?.currency || "USD").toUpperCase())
+const shouldShowStarterActions = computed(() =>
+  withinNewUserWindow.value || Number(summary.value?.total_products ?? 0) === 0
+)
+const uploadLimitCopy = computed(() =>
+  summary.value?.is_pro
+    ? "Pro plan upload size is unlimited for CSV and Excel imports."
+    : "Free plan upload size is limited to 1MB. Upgrade to Pro for unlimited upload size."
+)
+const formatCurrency = (value: number) => formatMoney(value, summaryCurrency.value)
 const statusDirection = computed<"down" | "up" | "dash">(() => {
   if (withinNewUserWindow.value) return "dash"
   if (potentialWeeklyGap.value > 0 || observedRisk.value > 0) return "down"
@@ -53,9 +64,9 @@ const statusCopy = computed(() => {
   }
   if (statusDirection.value === "down") {
     if (potentialWeeklyGap.value > 0) {
-      return `Potential demand gap is tracking at about ${formatNaira(potentialWeeklyGap.value)}/week based on current signals.`
+      return `Potential demand gap is tracking at about ${formatCurrency(potentialWeeklyGap.value)}/week based on current signals.`
     }
-    return `Observed operating risk is currently about ${formatNaira(observedRisk.value)}/week.`
+    return `Observed operating risk is currently about ${formatCurrency(observedRisk.value)}/week.`
   }
   return "Current signals suggest the business is operating within expected demand coverage."
 })
@@ -179,6 +190,30 @@ function formatNaira(value: number) {
       </div>
     </section>
 
+    <section v-if="shouldShowStarterActions" class="dashboard-home__starter surface">
+      <div class="dashboard-home__starter-copy">
+        <p class="dashboard-home__eyebrow">First actions</p>
+        <h2 class="dashboard-home__status-title">Add your first products or import your existing records</h2>
+        <p class="dashboard-home__status-text">
+          Start with manual entry if you want to set up a few products quickly, or import an Excel or CSV file if you already have operating data ready.
+        </p>
+        <span class="dashboard-home__status-meta">{{ uploadLimitCopy }}</span>
+      </div>
+
+      <div class="dashboard-home__starter-actions">
+        <NuxtLink to="/onboarding" class="dashboard-home__starter-card">
+          <span class="dashboard-home__starter-tag">Manual setup</span>
+          <strong>Add products and first sales manually</strong>
+          <span>Use guided setup to create products, verify stock, and record the first live operating signals.</span>
+        </NuxtLink>
+        <NuxtLink to="/upload" class="dashboard-home__starter-card">
+          <span class="dashboard-home__starter-tag">File import</span>
+          <strong>Upload an Excel or CSV file</strong>
+          <span>Bring in existing product, stock, or sales history in one step instead of typing everything from scratch.</span>
+        </NuxtLink>
+      </div>
+    </section>
+
     <section class="dashboard-home__workspaces">
       <WorkspaceLauncherGrid
         title="Workspaces"
@@ -210,6 +245,7 @@ function formatNaira(value: number) {
 
 .dashboard-home__hero,
 .dashboard-home__status,
+.dashboard-home__starter,
 .dashboard-home__loading {
   padding: 28px;
   border-radius: 26px;
@@ -362,6 +398,55 @@ function formatNaira(value: number) {
   color: var(--text-3);
 }
 
+.dashboard-home__starter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  gap: 20px;
+  align-items: start;
+}
+
+.dashboard-home__starter-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-home__starter-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  text-decoration: none;
+  color: var(--text);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.dashboard-home__starter-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  border-color: color-mix(in srgb, var(--accent, #534ab7) 24%, var(--border-subtle));
+}
+
+.dashboard-home__starter-card strong {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.dashboard-home__starter-card span:last-child {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.dashboard-home__starter-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
 .dashboard-home__loading {
   display: grid;
   gap: 12px;
@@ -397,7 +482,8 @@ function formatNaira(value: number) {
 
 @media (max-width: 900px) {
   .dashboard-home__hero,
-  .dashboard-home__status {
+  .dashboard-home__status,
+  .dashboard-home__starter {
     grid-template-columns: 1fr;
   }
 
@@ -419,6 +505,7 @@ function formatNaira(value: number) {
 
   .dashboard-home__hero,
   .dashboard-home__status,
+  .dashboard-home__starter,
   .dashboard-home__loading {
     padding: 22px;
     border-radius: 22px;

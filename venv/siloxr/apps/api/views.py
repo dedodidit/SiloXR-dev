@@ -41,6 +41,7 @@ from apps.core.services.demand_deficit_service import analyze_product_deficits
 from apps.core.statistics import compute_cv, expected_shortage, get_distribution_params
 
 logger = logging.getLogger(__name__)
+FREE_UPLOAD_LIMIT_BYTES = 1 * 1024 * 1024
 
 
 def _get_telegram_bot_username() -> str:
@@ -76,6 +77,14 @@ def _maybe_send_automated_product_update_reminder(user) -> None:
             getattr(user, "id", None),
             exc,
         )
+
+
+def _normalize_country(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _normalize_currency(value: str) -> str:
+    return (value or "").strip().upper()
 
 
 # ── Products ───────────────────────────────────────────────────────────────────
@@ -912,8 +921,20 @@ class DashboardViewSet(ViewSet):
         else:
             journey_hint = "Keep recording sales and stock counts to keep the advice sharp."
 
+        currency = _normalize_currency(getattr(user, "currency", "") or "USD")
+        if currency == "NGN":
+            currency_symbol = "₦"
+        elif currency == "USD":
+            currency_symbol = "$"
+        elif currency == "EUR":
+            currency_symbol = "€"
+        elif currency == "GBP":
+            currency_symbol = "£"
+        else:
+            currency_symbol = f"{currency} "
+
         if revenue_at_risk_total > 0:
-            managerial_headline = f"About N{int(round(revenue_at_risk_total)):,} is exposed in the current decision window."
+            managerial_headline = f"About {currency_symbol}{int(round(revenue_at_risk_total)):,} is exposed in the current decision window."
             managerial_subtext = "Focus on the highest-risk products first to protect sales before the next stockout window."
         elif critical_count > 0:
             managerial_headline = f"{critical_count} critical alert{'s' if critical_count != 1 else ''} need management attention."
@@ -929,7 +950,7 @@ class DashboardViewSet(ViewSet):
             {
                 "key": "financial_exposure",
                 "title": "Revenue at risk",
-                "value": f"N{int(round(revenue_at_risk_total)):,}" if revenue_at_risk_total > 0 else "Stable",
+                "value": f"{currency_symbol}{int(round(revenue_at_risk_total)):,}" if revenue_at_risk_total > 0 else "Stable",
                 "summary": (
                     f"{critical_count} critical alert{'s' if critical_count != 1 else ''} are currently exposing near-term sales."
                     if revenue_at_risk_total > 0 else
@@ -996,7 +1017,7 @@ class DashboardViewSet(ViewSet):
             burn_rates__sample_event_count__lt=7,
         ).exists()
         operating_assumption = industry_service.get_operating_assumption(user)
-        if baseline_in_use:
+        if baseline_in_use and _normalize_country(getattr(user, "country", "") or "nigeria") == "nigeria":
             operating_assumption = f"Based on similar businesses in Nigeria. {operating_assumption}"
         demand_deficits = analyze_product_deficits(user)
 
@@ -1016,6 +1037,8 @@ class DashboardViewSet(ViewSet):
                 "name": user.first_name or user.username,
                 "business_name": getattr(user, "business_name", "") or user.username,
                 "business_type": getattr(user, "business_type", "") or "General",
+                "country": getattr(user, "country", "") or "",
+                "currency": currency,
                 "tier": user.tier,
                 "is_pro": user.is_pro,
             },
@@ -1183,6 +1206,8 @@ def register(request):
     business_type = request.data.get("business_type", "").strip().lower()
     business_name = request.data.get("business_name", "").strip()
     phone_number = request.data.get("phone_number", "").strip()
+    country = _normalize_country(request.data.get("country", ""))
+    currency = _normalize_currency(request.data.get("currency", "") or "USD")
     email_notifications_enabled = bool(request.data.get("email_notifications_enabled", True))
     telegram_requested = bool(request.data.get("telegram_enabled", False))
     preferred_channel = (request.data.get("preferred_channel", User.CHANNEL_EMAIL) or User.CHANNEL_EMAIL).strip().lower()
@@ -1234,6 +1259,8 @@ def register(request):
         business_type=business_type,
         business_name=business_name,
         phone_number=phone_number or None,
+        country=country,
+        currency=currency,
         email_notifications_enabled=email_notifications_enabled,
         telegram_enabled=False,
         preferred_channel=preferred_channel,
@@ -1285,6 +1312,8 @@ def register(request):
             "username": user.username,
             "tier": user.tier,
             "business_type": user.business_type,
+            "country": user.country,
+            "currency": user.currency,
             "preferred_channel": user.preferred_channel,
             "telegram_link": telegram_link,
             "telegram_bot_user": telegram_bot_user,
@@ -1346,6 +1375,8 @@ def me(request):
         "is_pro":                       user.is_pro,
         "business_name":                user.business_name,
         "business_type":                user.business_type,
+        "country":                      user.country,
+        "currency":                     user.currency,
         "avatar_url":                   user.avatar_url,
         "phone_number":                 user.phone_number,
         "whatsapp_enabled":             False,
@@ -1369,6 +1400,11 @@ def upload_data(request):
     file = request.FILES.get("file")
     if not file:
         return Response({"detail": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+    if not request.user.is_pro and int(getattr(file, "size", 0) or 0) > FREE_UPLOAD_LIMIT_BYTES:
+        return Response(
+            {"detail": "Free plan uploads are limited to 1MB. Upgrade to Pro for unlimited upload size."},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
 
     ext          = file.name.rsplit(".", 1)[-1].lower()
     content      = file.read()
@@ -1817,6 +1853,8 @@ def profile(request):
             "email":                        user.email,
             "business_name":                user.business_name,
             "business_type":                user.business_type,
+            "country":                      user.country,
+            "currency":                     user.currency,
             "phone_number":                 user.phone_number,
             "whatsapp_enabled":             False,
             "telegram_enabled":             user.telegram_enabled,
@@ -1835,7 +1873,7 @@ def profile(request):
     allowed = [
         "business_name", "business_type", "phone_number",
         "email_notifications_enabled", "avatar_url",
-        "telegram_enabled", "preferred_channel",
+        "telegram_enabled", "preferred_channel", "country", "currency",
     ]
     telegram_profile = getattr(user, "telegram_profile", None)
     telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
@@ -1860,6 +1898,10 @@ def profile(request):
             value = request.data[field]
             if field == "preferred_channel" and value == "whatsapp":
                 value = user.CHANNEL_EMAIL
+            if field == "country":
+                value = _normalize_country(value)
+            if field == "currency":
+                value = _normalize_currency(value or "USD")
             setattr(user, field, value)
     user.save()
     return Response({"status": "updated"})

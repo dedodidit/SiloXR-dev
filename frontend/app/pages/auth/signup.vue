@@ -2,6 +2,7 @@
 definePageMeta({ auth: false })
 
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../../constants/site"
+import { countryOptions, currencyOptions } from "../../constants/markets"
 
 const config = useRuntimeConfig()
 const router = useRouter()
@@ -14,6 +15,8 @@ const form = reactive({
   business_name: "",
   business_type: "",
   phone_number: "",
+  country: "",
+  currency: "USD",
   email_notifications_enabled: true,
   preferred_channel: "email",
   terms_accepted: false,
@@ -60,6 +63,8 @@ const signUp = async () => {
         business_name: form.business_name,
         business_type: form.business_type,
         phone_number: form.phone_number,
+        country: form.country,
+        currency: form.currency,
         email_notifications_enabled: form.email_notifications_enabled,
         telegram_enabled: form.preferred_channel === "telegram",
         preferred_channel: form.preferred_channel,
@@ -169,6 +174,26 @@ useHead({ title: "Create account - SiloXR" })
             autocomplete="tel"
             placeholder="+2348012345678"
           />
+        </div>
+      </div>
+
+      <div class="auth-grid">
+        <div class="field">
+          <label class="field__label">Country</label>
+          <select v-model="form.country" class="field__input">
+            <option v-for="option in countryOptions" :key="option.value || 'blank-country'" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field__label">Currency</label>
+          <select v-model="form.currency" class="field__input">
+            <option v-for="option in currencyOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </div>
       </div>
 

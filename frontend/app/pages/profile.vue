@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../constants/site"
+import { countryOptions, currencyOptions } from "../constants/markets"
 
 const { $api } = useNuxtApp()
 
@@ -24,6 +25,8 @@ const form = reactive({
   business_name: "",
   business_type: "",
   phone_number: "",
+  country: "",
+  currency: "USD",
   email_notifications_enabled: true,
   telegram_enabled: false,
   preferred_channel: "email",
@@ -40,6 +43,8 @@ const hydrateProfile = async () => {
     business_name: user.value.business_name,
     business_type: user.value.business_type,
     phone_number: user.value.phone_number,
+    country: user.value.country || "",
+    currency: user.value.currency || "USD",
     email_notifications_enabled: user.value.email_notifications_enabled,
     telegram_enabled: !!user.value.telegram_enabled,
     preferred_channel: user.value.preferred_channel || "email",
@@ -180,6 +185,22 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
               <option value="hardware">Hardware & building</option>
               <option value="supermarket">Supermarket</option>
               <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label">Country</label>
+            <select v-model="form.country" class="field__input">
+              <option v-for="option in countryOptions" :key="option.value || 'blank-country'" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label">Currency</label>
+            <select v-model="form.currency" class="field__input">
+              <option v-for="option in currencyOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
             </select>
           </div>
           <div class="field">

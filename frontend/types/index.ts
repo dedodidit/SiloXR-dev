@@ -83,6 +83,8 @@ export interface UserContextSummary {
   name:          string
   business_name: string
   business_type: string
+  country?:      string
+  currency?:     string
   tier:          "free" | "pro"
   is_pro:        boolean
 }

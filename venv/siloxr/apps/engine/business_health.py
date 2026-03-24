@@ -128,7 +128,7 @@ class BusinessHealthReportService:
     def report_from_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_business_health_report(payload)
 
-    def build_payload_for_user(self, user, *, currency: str = "NGN") -> dict[str, Any]:
+    def build_payload_for_user(self, user, *, currency: str = "USD") -> dict[str, Any]:
         products = (
             Product.objects.filter(owner=user, is_active=True)
             .prefetch_related("burn_rates")
@@ -157,17 +157,19 @@ class BusinessHealthReportService:
             "currency": currency,
         }
 
-    def report_for_user(self, user, *, currency: str = "NGN") -> dict[str, Any]:
-        return self.report_from_payload(self.build_payload_for_user(user, currency=currency))
+    def report_for_user(self, user, *, currency: str | None = None) -> dict[str, Any]:
+        resolved_currency = (currency or getattr(user, "currency", "") or "USD").upper()
+        return self.report_from_payload(self.build_payload_for_user(user, currency=resolved_currency))
 
-    def build_pdf_context(self, user, *, period_end: date | None = None, currency: str = "NGN") -> dict[str, Any]:
-        report = self.report_for_user(user, currency=currency)
+    def build_pdf_context(self, user, *, period_end: date | None = None, currency: str | None = None) -> dict[str, Any]:
+        resolved_currency = (currency or getattr(user, "currency", "") or "USD").upper()
+        report = self.report_for_user(user, currency=resolved_currency)
         end = period_end or timezone.localdate()
         start = end.replace(day=1)
         return {
             "business_id": str(user.id),
             "business_name": getattr(user, "business_name", "") or getattr(user, "username", "") or str(user.id),
-            "currency": currency.upper(),
+            "currency": resolved_currency,
             "period_start": start.isoformat(),
             "period_end": end.isoformat(),
             "report": report,
@@ -178,7 +180,7 @@ class BusinessHealthReportService:
         user,
         *,
         period_end: date | None = None,
-        currency: str = "NGN",
+        currency: str | None = None,
     ) -> dict[str, Any]:
         pdf_context = self.build_pdf_context(user, period_end=period_end, currency=currency)
         return {
@@ -188,12 +190,13 @@ class BusinessHealthReportService:
             "report": pdf_context["report"],
         }
 
-    def build_partner_snapshot(self, user, *, currency: str = "NGN") -> dict[str, Any]:
-        report = self.report_for_user(user, currency=currency)
+    def build_partner_snapshot(self, user, *, currency: str | None = None) -> dict[str, Any]:
+        resolved_currency = (currency or getattr(user, "currency", "") or "USD").upper()
+        report = self.report_for_user(user, currency=resolved_currency)
         summary = report["summary"]
         return {
             "business_id": str(user.id),
-            "currency": currency.upper(),
+            "currency": resolved_currency,
             "estimated_monthly_revenue": summary["estimated_monthly_revenue"],
             "potential_revenue_gap_weekly": summary["potential_revenue_gap_weekly"],
             "confidence_score": summary["confidence_score"],
