@@ -55,12 +55,13 @@ const items = [
 
 const visibleItems = computed(() => {
   const base = [...items]
-  if (currentUser.value && !currentUser.value?.is_pro) {
+  const currentTier = String(currentUser.value?.tier || "").toLowerCase()
+  if (currentUser.value && currentTier !== "enterprise") {
     base.splice(base.length - 1, 0, {
       id: "billing",
       label: "Billing",
       icon: "M3 6.75A2.75 2.75 0 015.75 4h12.5A2.75 2.75 0 0121 6.75v10.5A2.75 2.75 0 0118.25 20H5.75A2.75 2.75 0 013 17.25V6.75zm3 2.25a.75.75 0 000 1.5h9a.75.75 0 000-1.5H6zm0 4a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H6z",
-      tip: "Upgrade subscription",
+      tip: currentTier === "free" ? "Upgrade subscription" : "Manage subscription",
       href: "/billing/upgrade",
     })
   }

@@ -40,6 +40,9 @@ const displayName = computed(() =>
 const avatarLetter = computed(() =>
   String(displayName.value).trim().charAt(0).toUpperCase() || "S"
 )
+
+const isEnterprise = computed(() => String(user.value?.tier || "").toLowerCase() === "enterprise")
+const isPaidPlan = computed(() => ["core", "pro", "enterprise"].includes(String(user.value?.tier || "").toLowerCase()))
 </script>
 
 <template>
@@ -57,8 +60,8 @@ const avatarLetter = computed(() =>
           <span
             class="ucs__tier"
             :style="{
-              background: user.is_pro ? 'var(--purple-bg, #EEEDFE)' : 'var(--border-subtle, #EDECEA)',
-              color:       user.is_pro ? 'var(--purple, #534AB7)' : 'var(--text-3, #7A7870)',
+              background: isPaidPlan ? 'var(--purple-bg, #EEEDFE)' : 'var(--border-subtle, #EDECEA)',
+              color:       isPaidPlan ? 'var(--purple, #534AB7)' : 'var(--text-3, #7A7870)',
             }"
           >
             {{ user.tier?.toUpperCase() ?? "FREE" }}
@@ -76,11 +79,11 @@ const avatarLetter = computed(() =>
         Monitoring {{ coverage.visible }} of {{ coverage.total }} products
       </span>
       <NuxtLink
-        v-if="!user.is_pro"
+        v-if="!isEnterprise"
         to="/billing/upgrade"
         class="ucs__upgrade"
       >
-        Upgrade to Pro
+        View plans
       </NuxtLink>
     </div>
   </div>

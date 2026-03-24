@@ -198,12 +198,12 @@ function formatNaira(value: number) {
 
           <div class="dashboard-home__starter-actions dashboard-home__starter-actions--compact">
             <NuxtLink to="/onboarding" class="dashboard-home__starter-card dashboard-home__starter-card--primary">
-              <span class="dashboard-home__starter-tag">Manual entry</span>
-              <strong>Add products</strong>
+              <span class="dashboard-home__starter-tag">Manual setup</span>
+              <strong>Add products and first sales</strong>
             </NuxtLink>
             <NuxtLink to="/upload" class="dashboard-home__starter-card dashboard-home__starter-card--secondary">
-              <span class="dashboard-home__starter-tag">Import</span>
-              <strong>Upload CSV or Excel</strong>
+              <span class="dashboard-home__starter-tag">File import</span>
+              <strong>Upload an Excel or CSV file</strong>
             </NuxtLink>
           </div>
         </div>
@@ -450,8 +450,8 @@ function formatNaira(value: number) {
 .dashboard-home__starter-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 16px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .dashboard-home__starter-actions--compact {
@@ -530,42 +530,47 @@ function formatNaira(value: number) {
 
 .dashboard-home__starter-card {
   display: grid;
-  gap: 10px;
-  padding: 16px 18px;
-  border-radius: 20px;
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
+  gap: 4px;
+  min-height: 88px;
+  padding: 13px 15px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, #185FA5 24%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #185FA5 14%, var(--bg-card)), color-mix(in srgb, #2D7BD0 22%, var(--bg-card)));
   text-decoration: none;
   color: var(--text);
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-card) 72%, white 28%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--bg-card) 64%, white 36%),
+    0 10px 22px color-mix(in srgb, #185FA5 10%, transparent);
 }
 
 .dashboard-home__starter-card--primary {
-  border-color: color-mix(in srgb, var(--purple) 34%, var(--border-subtle));
+  border-color: color-mix(in srgb, #185FA5 32%, var(--border-subtle));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--purple) 15%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 96%, transparent));
+    linear-gradient(135deg, color-mix(in srgb, #185FA5 20%, var(--bg-card)), color-mix(in srgb, #2D7BD0 28%, var(--bg-card)));
 }
 
 .dashboard-home__starter-card--secondary {
-  border-color: color-mix(in srgb, var(--icon-accent) 28%, var(--border-subtle));
+  border-color: color-mix(in srgb, #2D7BD0 36%, var(--border-subtle));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--icon-accent) 12%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 96%, transparent));
+    linear-gradient(135deg, color-mix(in srgb, #2D7BD0 18%, var(--bg-card)), color-mix(in srgb, #4AA3FF 24%, var(--bg-card)));
 }
 
 .dashboard-home__starter-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 30px color-mix(in srgb, var(--accent, #534ab7) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent, #534ab7) 38%, var(--border-subtle));
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px color-mix(in srgb, #185FA5 16%, transparent);
+  border-color: color-mix(in srgb, #2D7BD0 44%, var(--border-subtle));
 }
 
 .dashboard-home__starter-card strong {
-  font-size: 16px;
-  line-height: 1.35;
+  font-size: 14px;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
 }
 
 .dashboard-home__starter-actions--compact .dashboard-home__starter-card {
-  gap: 6px;
+  gap: 3px;
 }
 
 .dashboard-home__starter-card span:last-child {
@@ -579,7 +584,7 @@ function formatNaira(value: number) {
   font-weight: 800;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--text-2);
+  color: color-mix(in srgb, #185FA5 78%, var(--text-2));
 }
 
 .dashboard-home__loading {

@@ -4,6 +4,8 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.billing.enums import FeatureFlag
+from apps.billing.services import FeatureGateService
 from apps.inventory.models import (
     DecisionLog,
     ForecastSnapshot,
@@ -14,6 +16,18 @@ from apps.inventory.models import (
 from apps.inventory.events import EventProcessor, EventProcessingError
 from apps.engine.trust import get_confidence_phrase
 from apps.engine.confidence import ConfidenceScorer
+
+
+def _request_plan(context: dict) -> str:
+    request = (context or {}).get("request")
+    user = getattr(request, "user", None)
+    if not user or not getattr(user, "is_authenticated", False):
+        return ""
+    return getattr(user, "current_plan", getattr(user, "tier", ""))
+
+
+def _has_feature(context: dict, feature_flag: FeatureFlag) -> bool:
+    return FeatureGateService.has_access(_request_plan(context), feature_flag)
 
 
 
@@ -81,8 +95,10 @@ class ProductListSerializer(
     def get_active_decision(self, obj) -> dict | None:
         """
         Returns the most recent unexpired, unacknowledged decision.
-        Returns None for Free users (pro gate in view; serializer stays neutral).
+        Returns None when the current plan does not include action-layer access.
         """
+        if not _has_feature(self.context, FeatureFlag.VIEW_ACTIONS):
+            return None
         decision = (
             DecisionLog.objects
             .filter(
@@ -149,6 +165,8 @@ class ProductDetailSerializer(ProductListSerializer):
         7-day forecast strip: days 1, 3, 7 and any key threshold crossings.
         Compact format for the frontend strip component.
         """
+        if not _has_feature(self.context, FeatureFlag.VIEW_FORECAST):
+            return []
         key_offsets = {1, 3, 7}
         today = timezone.now().date()
         snapshots = (
@@ -366,11 +384,15 @@ class DecisionLogSerializer(ConfidenceFieldsMixin, serializers.ModelSerializer):
     product_name        = serializers.CharField(source="product.name", read_only=True)
     product_id          = serializers.UUIDField(source="product.id", read_only=True)
     gated_reasoning     = serializers.SerializerMethodField()
-    impact              = serializers.FloatField(source="estimated_revenue_loss", read_only=True)
+    impact              = serializers.SerializerMethodField()
     confidence_level    = serializers.SerializerMethodField()
     confidence_phrase   = serializers.SerializerMethodField()
     data_stale          = serializers.SerializerMethodField()
     assumption_message  = serializers.SerializerMethodField()
+    estimated_lost_sales = serializers.SerializerMethodField()
+    estimated_revenue_loss = serializers.SerializerMethodField()
+    risk_score = serializers.SerializerMethodField()
+    priority_score = serializers.SerializerMethodField()
 
     class Meta:
         model  = DecisionLog
@@ -415,10 +437,9 @@ class DecisionLogSerializer(ConfidenceFieldsMixin, serializers.ModelSerializer):
         """
         Returns the commercial impact estimate in a format the frontend
         can render as: 'You may lose ~₦12,400 if this is not addressed.'
-        Only shown to Pro users.
+        Only shown to plans with quantified revenue-gap access.
         """
-        request = self.context.get("request")
-        if not request or not request.user.is_pro:
+        if not _has_feature(self.context, FeatureFlag.VIEW_REVENUE_GAP):
             return {"visible": False}
 
         lost  = getattr(obj, "estimated_lost_sales", 0) or 0
@@ -436,6 +457,29 @@ class DecisionLogSerializer(ConfidenceFieldsMixin, serializers.ModelSerializer):
 
     def get_confidence_label(self, obj):
         return super().get_confidence_label(obj)
+
+    def get_estimated_lost_sales(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_REVENUE_GAP):
+            return 0.0
+        return float(getattr(obj, "estimated_lost_sales", 0.0) or 0.0)
+
+    def get_estimated_revenue_loss(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_REVENUE_GAP):
+            return 0.0
+        return float(getattr(obj, "estimated_revenue_loss", 0.0) or 0.0)
+
+    def get_impact(self, obj) -> float:
+        return self.get_estimated_revenue_loss(obj)
+
+    def get_risk_score(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_BASIC_PRIORITIZATION):
+            return 0.0
+        return float(getattr(obj, "risk_score", 0.0) or 0.0)
+
+    def get_priority_score(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_BASIC_PRIORITIZATION):
+            return 0.0
+        return float(getattr(obj, "priority_score", 0.0) or 0.0)
 
     def get_confidence_level(self, obj) -> str:
         return self.get_confidence_label(obj)
@@ -567,12 +611,27 @@ class ReorderRecordSerializer(serializers.ModelSerializer):
 
 
 class PortfolioSummarySerializer(serializers.Serializer):
-    total_revenue_at_risk = serializers.FloatField()
+    total_revenue_at_risk = serializers.SerializerMethodField()
     products_needing_action = serializers.IntegerField()
     top_decisions = DecisionLogSerializer(many=True)
-    forecast_accuracy = serializers.FloatField()
+    forecast_accuracy = serializers.SerializerMethodField()
     confidence_score = serializers.FloatField()
-    overstock_capital = serializers.FloatField()
+    overstock_capital = serializers.SerializerMethodField()
+
+    def get_total_revenue_at_risk(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_PORTFOLIO_INSIGHTS):
+            return 0.0
+        return float(obj.get("total_revenue_at_risk", 0.0) or 0.0)
+
+    def get_forecast_accuracy(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_FORECAST):
+            return 0.0
+        return float(obj.get("forecast_accuracy", 0.0) or 0.0)
+
+    def get_overstock_capital(self, obj) -> float:
+        if not _has_feature(self.context, FeatureFlag.VIEW_PORTFOLIO_INSIGHTS):
+            return 0.0
+        return float(obj.get("overstock_capital", 0.0) or 0.0)
 
 
 class BusinessHealthSummarySerializer(serializers.Serializer):

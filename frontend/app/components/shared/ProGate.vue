@@ -1,7 +1,12 @@
 <!-- frontend/app/components/shared/ProGate.vue -->
 
 <script setup lang="ts">
-defineProps<{ feature: string }>()
+const props = withDefaults(defineProps<{
+  feature: string
+  requiredPlan?: string
+}>(), {
+  requiredPlan: "Pro",
+})
 </script>
 
 <template>
@@ -12,12 +17,12 @@ defineProps<{ feature: string }>()
           stroke="var(--color-amber)" stroke-width="1.5" stroke-linejoin="round"/>
       </svg>
     </div>
-    <p class="pro-gate__title">{{ feature }} is a Pro feature</p>
+    <p class="pro-gate__title">{{ props.feature }} requires {{ props.requiredPlan }}</p>
     <p class="pro-gate__sub">
-      Upgrade to SiloXR Pro to access predictions, decisions, and alerts.
+      Upgrade your plan to unlock this layer of SiloXR.
     </p>
     <NuxtLink to="/billing/upgrade" class="pro-gate__btn">
-      Upgrade to Pro
+      View plans
     </NuxtLink>
   </div>
 </template>

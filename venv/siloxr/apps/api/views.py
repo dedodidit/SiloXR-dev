@@ -15,6 +15,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet, ViewSet
 from rest_framework.permissions import AllowAny
+from apps.billing.enums import FeatureFlag
+from apps.billing.services import FeatureGateService
 from apps.inventory.models import (
     DecisionLog, ForecastSnapshot, InventoryEvent, Product, ReorderRecord,
 )
@@ -91,6 +93,27 @@ def _currency_for_country(country: str) -> str:
     from apps.billing.services import PricingService
 
     return PricingService.get_currency(country)
+
+
+def _current_plan(user) -> str:
+    return getattr(user, "current_plan", getattr(user, "tier", ""))
+
+
+def _user_has_feature(user, feature_flag: FeatureFlag) -> bool:
+    return FeatureGateService.has_access(_current_plan(user), feature_flag)
+
+
+def _feature_denied_response(plan: str, feature_name: str, required_plan: str) -> Response:
+    return Response(
+        {
+            "error": "plan_upgrade_required",
+            "detail": f"{feature_name} is not available on your current plan.",
+            "current_plan": plan,
+            "required_plan": required_plan,
+            "upgrade_url": "/billing/upgrade/",
+        },
+        status=status.HTTP_402_PAYMENT_REQUIRED,
+    )
 
 
 def _send_welcome_email(user, *, preferred_channel: str) -> bool:
@@ -344,6 +367,11 @@ class DecisionViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class   = DecisionLogSerializer
 
+    def _ensure_action_access(self, request):
+        if _user_has_feature(request.user, FeatureFlag.VIEW_ACTIONS):
+            return None
+        return _feature_denied_response(_current_plan(request.user), "Decision actions", "core")
+
     def get_queryset(self):
         qs = (
             DecisionLog.objects
@@ -397,6 +425,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         from apps.core.services.demand_deficit_service import analyze_product_deficits
         from apps.core.services.demand_deficit_service import analyze_product_deficits
         from apps.core.services.demand_deficit_service import analyze_product_deficits
@@ -414,6 +445,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         return response
 
     def retrieve(self, request, *args, **kwargs):
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         response = super().retrieve(request, *args, **kwargs)
         decision = self.get_object()
         if decision.status == DecisionLog.STATUS_SUGGESTED:
@@ -490,6 +524,18 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         Lightweight what-if comparison for one existing decision.
         Computed on demand and cached briefly. No writes.
         """
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         decision = self.get_object()
         if decision.product.owner != request.user:
             raise PermissionDenied()
@@ -560,6 +606,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         Bulk acknowledge all active decisions for the current user.
         Useful for the "all clear" action in the dashboard.
         """
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         updated = DecisionLog.objects.filter(
             product__owner=request.user,
             is_acknowledged=False,
@@ -572,6 +621,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="top-priorities")
     def top_priorities(self, request):
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         from apps.core.usage import UsagePolicyService
         throttle = UsagePolicyService().enforce_refresh_window(request.user, "decisions-priorities")
         if throttle:
@@ -593,6 +645,8 @@ class PortfolioViewSet(ViewSet):
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
+        if not _user_has_feature(request.user, FeatureFlag.VIEW_PORTFOLIO_INSIGHTS):
+            return _feature_denied_response(_current_plan(request.user), "Portfolio insights", "pro")
         from apps.engine.portfolio import PortfolioService
 
         summary = PortfolioService().summary_for_user(request.user)
@@ -615,6 +669,8 @@ class BusinessHealthViewSet(ViewSet):
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
+        if not _user_has_feature(request.user, FeatureFlag.VIEW_BUSINESS_HEALTH_REPORT):
+            return _feature_denied_response(_current_plan(request.user), "Business Health", "pro")
         from apps.engine.business_health import BusinessHealthReportService
 
         report = BusinessHealthReportService().report_for_user(request.user)
@@ -718,7 +774,14 @@ class ForecastViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class   = ForecastSnapshotSerializer
 
+    def _ensure_forecast_access(self, request):
+        if _user_has_feature(request.user, FeatureFlag.VIEW_FORECAST):
+            return None
+        return _feature_denied_response(_current_plan(request.user), "Forecasting", "pro")
+
     def get_queryset(self):
+        if not _user_has_feature(self.request.user, FeatureFlag.VIEW_FORECAST):
+            return ForecastSnapshot.objects.none()
         qs = ForecastSnapshot.objects.filter(
             product__owner=self.request.user
         ).select_related("product")
@@ -737,6 +800,9 @@ class ForecastViewSet(ReadOnlyModelViewSet):
         Returns the compact forecast strip for a specific product.
         Used by the ForecastStrip component. Defaults to 7-day horizon.
         """
+        denied = self._ensure_forecast_access(request)
+        if denied:
+            return denied
         from apps.core.usage import UsagePolicyService
         throttle = UsagePolicyService().enforce_refresh_window(request.user, "forecast-strip")
         if throttle:
@@ -784,6 +850,9 @@ class ForecastViewSet(ReadOnlyModelViewSet):
         Returns historical accuracy metrics for a product.
         Powered by the Feedback Engine's resolved snapshots.
         """
+        denied = self._ensure_forecast_access(request)
+        if denied:
+            return denied
         product_id = request.query_params.get("product")
         if not product_id:
             return Response(
@@ -889,6 +958,10 @@ class DashboardViewSet(ViewSet):
         from apps.engine.industry import IndustryInsightService
         from apps.engine.priorities import get_top_priorities
         from apps.inventory.models import BurnRate
+        can_view_actions = _user_has_feature(user, FeatureFlag.VIEW_ACTIONS)
+        can_view_revenue_gap = _user_has_feature(user, FeatureFlag.VIEW_REVENUE_GAP)
+        can_view_forecast = _user_has_feature(user, FeatureFlag.VIEW_FORECAST)
+        can_view_portfolio = _user_has_feature(user, FeatureFlag.VIEW_PORTFOLIO_INSIGHTS)
 
         products = Product.objects.filter(
             owner=user, is_active=True
@@ -918,15 +991,15 @@ class DashboardViewSet(ViewSet):
             .exclude(status__in=[DecisionLog.STATUS_ACTED, DecisionLog.STATUS_IGNORED])
             .select_related("product")
             .order_by("-priority_score", "-created_at")[:20]
-        )
-        top_priorities = get_top_priorities(user.id, limit=3)
+        ) if can_view_actions else []
+        top_priorities = get_top_priorities(user.id, limit=3) if can_view_actions else []
         critical_count = sum(
             1 for d in active_decisions if d.action == DecisionLog.ALERT_CRITICAL
         )
         revenue_at_risk_total = round(
             sum(float(d.estimated_revenue_loss or 0.0) for d in active_decisions),
             2,
-        )
+        ) if can_view_revenue_gap else 0.0
         today = now.date()
         import datetime
         stockouts_7d = (
@@ -939,7 +1012,7 @@ class DashboardViewSet(ViewSet):
             .values("product")
             .distinct()
             .count()
-        )
+        ) if can_view_forecast else 0
 
         recent_decisions = DecisionLog.objects.filter(
             product__owner=user,
@@ -999,14 +1072,14 @@ class DashboardViewSet(ViewSet):
             {
                 "key": "financial_exposure",
                 "title": "Revenue at risk",
-                "value": f"{currency_symbol}{int(round(revenue_at_risk_total)):,}" if revenue_at_risk_total > 0 else "Stable",
+                "value": f"{currency_symbol}{int(round(revenue_at_risk_total)):,}" if revenue_at_risk_total > 0 else ("Unlock with Core" if not can_view_revenue_gap else "Stable"),
                 "summary": (
                     f"{critical_count} critical alert{'s' if critical_count != 1 else ''} are currently exposing near-term sales."
                     if revenue_at_risk_total > 0 else
-                    "No immediate revenue leak is visible from the current active decisions."
+                    ("Quantified revenue exposure becomes available on the Core decision layer." if not can_view_revenue_gap else "No immediate revenue leak is visible from the current active decisions.")
                 ),
                 "recommendation": "Review the critical summary and clear the highest-risk products first.",
-                "tone": "critical" if revenue_at_risk_total > 0 else "safe",
+                "tone": "critical" if revenue_at_risk_total > 0 else ("warning" if not can_view_revenue_gap else "safe"),
                 "target": "decisions",
             },
             {
@@ -1016,10 +1089,10 @@ class DashboardViewSet(ViewSet):
                 "summary": (
                     f"{stockouts_7d} product{'s are' if stockouts_7d != 1 else ' is'} projected to hit a pessimistic stockout within a week."
                     if stockouts_7d > 0 else
-                    "No product is currently forecast to hit a pessimistic stockout within seven days."
+                    ("Forecast-driven stockout windows become available on Pro." if not can_view_forecast else "No product is currently forecast to hit a pessimistic stockout within seven days.")
                 ),
                 "recommendation": "Use the trend chart to confirm whether the pressure is demand-driven or a stock-count issue.",
-                "tone": "warning" if stockouts_7d > 0 else "safe",
+                "tone": "warning" if stockouts_7d > 0 else ("warning" if not can_view_forecast else "safe"),
                 "target": "stockouts",
             },
             {
@@ -1068,7 +1141,7 @@ class DashboardViewSet(ViewSet):
         operating_assumption = industry_service.get_operating_assumption(user)
         if baseline_in_use and _normalize_country(getattr(user, "country", "") or "nigeria") == "nigeria":
             operating_assumption = f"Based on similar businesses in Nigeria. {operating_assumption}"
-        demand_deficits = analyze_product_deficits(user)
+        demand_deficits = analyze_product_deficits(user) if can_view_revenue_gap else []
 
         return {
             "total_products": total,
@@ -1111,7 +1184,7 @@ class DashboardViewSet(ViewSet):
             },
             "operating_assumption": operating_assumption,
             "baseline_in_use": baseline_in_use,
-            "demand_deficits": demand_deficits,
+            "demand_deficits": demand_deficits if can_view_portfolio or can_view_revenue_gap else [],
         }
 
     @action(detail=False, methods=["get"], url_path="summary")
@@ -1656,6 +1729,8 @@ def get_insights(request):
     engine   = InsightEngine()
     insights = engine.run_for_user(request.user)
     gate     = IntelligenceGate()
+    can_view_revenue_gap = _user_has_feature(request.user, FeatureFlag.VIEW_REVENUE_GAP)
+    can_view_actions = _user_has_feature(request.user, FeatureFlag.VIEW_ACTIONS)
 
     data = []
     for i in insights:
@@ -1672,9 +1747,9 @@ def get_insights(request):
             "product_sku":    i.product_sku,
             "product_name":   i.product_name,
             "observation":    i.observation,
-            "prediction":     prediction,
-            "recommendation": i.recommendation,
-            "impact":         impact,
+            "prediction":     prediction if can_view_actions else "Monitor this product closely.",
+            "recommendation": i.recommendation if can_view_actions else "Record more stock and sales activity to unlock a recommended action.",
+            "impact":         impact if can_view_revenue_gap else "",
             "context":        gate.abstract_reasoning(i.context, depth),
             "reasoning":      gate.abstract_reasoning(i.reasoning, depth),
             "confidence":     i.confidence,
@@ -1682,8 +1757,8 @@ def get_insights(request):
             "severity":       i.severity,
             "action_type":    i.action_type,
             "urgency_tier":   i.urgency_tier,
-            "lost_sales_est": i.lost_sales_est,
-            "is_pro_detail":  request.user.is_pro,
+            "lost_sales_est": i.lost_sales_est if can_view_revenue_gap else 0,
+            "is_pro_detail":  _user_has_feature(request.user, FeatureFlag.VIEW_FORECAST),
         })
 
     return Response(data)
@@ -1709,9 +1784,11 @@ def get_dominant_insight(request):
     from apps.engine.insights import InsightEngine
     from apps.engine.gating import IntelligenceGate
 
-    is_pro = request.user.is_pro
+    can_view_actions = _user_has_feature(request.user, FeatureFlag.VIEW_ACTIONS)
+    can_view_revenue_gap = _user_has_feature(request.user, FeatureFlag.VIEW_REVENUE_GAP)
+    can_view_forecast = _user_has_feature(request.user, FeatureFlag.VIEW_FORECAST)
 
-    if is_pro:
+    if can_view_actions:
         decisions = get_top_priorities(request.user.id, limit=1)
         if decisions:
             d   = decisions[0]
@@ -1719,7 +1796,7 @@ def get_dominant_insight(request):
             imp = {}
             lost = getattr(d, "estimated_lost_sales", 0) or 0
             rev  = getattr(d, "estimated_revenue_loss", 0) or 0
-            if lost > 0:
+            if lost > 0 and can_view_revenue_gap:
                 imp = {
                     "visible":          True,
                     "lost_sales_units": round(lost, 1),
@@ -1733,15 +1810,15 @@ def get_dominant_insight(request):
                     "product_sku":    p.sku,
                     "product_name":   p.name,
                     "observation":    d.reasoning.split(".")[0] + ".",
-                    "prediction":     _days_to_prediction(d),
+                    "prediction":     _days_to_prediction(d) if can_view_forecast else "Attention is needed soon.",
                     "recommendation": _action_to_recommendation(d),
-                    "impact":         _impact_to_sentence(imp),
+                    "impact":         _impact_to_sentence(imp) if can_view_revenue_gap else "",
                     "confidence":     d.confidence_score,
                     "date_signal":    _days_to_date_signal(d),
                     "severity":       d.severity,
                     "urgency_tier":   d.severity,
                     "impact_detail":  imp,
-                    "is_pro_detail":  True,
+                    "is_pro_detail":  can_view_forecast,
                     "priority_score": d.priority_score,
                 }
             })

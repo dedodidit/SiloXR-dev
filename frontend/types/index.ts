@@ -85,7 +85,7 @@ export interface UserContextSummary {
   business_type: string
   country?:      string
   currency?:     string
-  tier:          "free" | "pro"
+  tier:          "free" | "core" | "pro" | "enterprise"
   is_pro:        boolean
 }
 
@@ -123,7 +123,7 @@ export interface DashboardSummary {
   products_low_confidence:  number
   critical_alerts:          number
   avg_confidence:           number
-  tier:                     "free" | "pro"
+  tier:                     "free" | "core" | "pro" | "enterprise"
   is_pro:                   boolean
   active_decisions:         Decision[] | null
   top_priorities:           Decision[]
@@ -143,7 +143,7 @@ export interface DashboardSummary {
   }
   managerial_signals: ManagerialSignal[]
   usage_policy: {
-    tier: "free" | "pro"
+    tier: "free" | "core" | "pro" | "enterprise"
     unlimited: boolean
     refresh_interval_seconds: number
     policy_summary: string

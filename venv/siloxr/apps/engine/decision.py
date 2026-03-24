@@ -808,7 +808,7 @@ class DecisionEngine:
 
         products = (
             Product.objects
-            .filter(is_active=True, owner__tier="pro")
+            .filter(is_active=True, owner__tier__in=["core", "pro", "enterprise"])
             .select_related("owner")
         )
 
