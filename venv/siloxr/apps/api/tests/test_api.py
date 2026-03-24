@@ -342,7 +342,7 @@ class TestRegistrationAndUpload(APITestBase):
             "business_name": "Global Foods Ltd",
             "business_type": "retail",
             "country": "ghana",
-            "currency": "GHS",
+            "currency": "USD",
             "terms_accepted": True,
             "terms_version": "test-v1",
         }, format="json")

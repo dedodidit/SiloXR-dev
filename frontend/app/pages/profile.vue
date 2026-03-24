@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../constants/site"
-import { countryOptions, currencyOptions } from "../constants/markets"
+import { countryOptions, currencyForCountry, currencyLabel } from "../constants/markets"
 
 const { $api } = useNuxtApp()
 
@@ -26,7 +26,6 @@ const form = reactive({
   business_type: "",
   phone_number: "",
   country: "",
-  currency: "USD",
   email_notifications_enabled: true,
   telegram_enabled: false,
   preferred_channel: "email",
@@ -34,6 +33,8 @@ const form = reactive({
 })
 
 const pwdForm = reactive({ old_password: "", new_password: "", confirm: "" })
+const derivedCurrency = computed(() => currencyForCountry(form.country || user.value?.country || ""))
+const derivedCurrencyLabel = computed(() => currencyLabel(derivedCurrency.value))
 
 const hydrateProfile = async () => {
   user.value = await $api("/profile/").catch(() => null)
@@ -44,7 +45,6 @@ const hydrateProfile = async () => {
     business_type: user.value.business_type,
     phone_number: user.value.phone_number,
     country: user.value.country || "",
-    currency: user.value.currency || "USD",
     email_notifications_enabled: user.value.email_notifications_enabled,
     telegram_enabled: !!user.value.telegram_enabled,
     preferred_channel: user.value.preferred_channel || "email",
@@ -197,11 +197,8 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
           </div>
           <div class="field">
             <label class="field__label">Currency</label>
-            <select v-model="form.currency" class="field__input">
-              <option v-for="option in currencyOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
+            <input class="field__input" type="text" :value="derivedCurrencyLabel" disabled />
+            <span class="field__hint">Currency follows your selected country automatically.</span>
           </div>
           <div class="field">
             <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">

@@ -25,6 +25,25 @@ export const currencyOptions = [
   { value: "AED", label: "AED" },
 ]
 
+const countryCurrencyMap: Record<string, string> = {
+  nigeria: "NGN",
+  ghana: "GHS",
+  kenya: "KES",
+  "south africa": "ZAR",
+  "united kingdom": "GBP",
+  "united states": "USD",
+  canada: "CAD",
+  india: "INR",
+  uae: "AED",
+}
+
+export const currencyForCountry = (country = "") =>
+  countryCurrencyMap[String(country || "").trim().toLowerCase()] || "USD"
+
+export const currencyLabel = (currency = "USD") =>
+  currencyOptions.find((option) => option.value === String(currency || "USD").toUpperCase())?.label
+  ?? String(currency || "USD").toUpperCase()
+
 export const formatMoney = (value: number, currency = "USD") => {
   const amount = Number(value || 0)
   try {

@@ -87,6 +87,22 @@ def _normalize_currency(value: str) -> str:
     return (value or "").strip().upper()
 
 
+def _currency_for_country(country: str) -> str:
+    normalized = _normalize_country(country)
+    mapping = {
+        "nigeria": "NGN",
+        "ghana": "GHS",
+        "kenya": "KES",
+        "south africa": "ZAR",
+        "united kingdom": "GBP",
+        "united states": "USD",
+        "canada": "CAD",
+        "india": "INR",
+        "uae": "AED",
+    }
+    return mapping.get(normalized, "USD")
+
+
 # ── Products ───────────────────────────────────────────────────────────────────
 
 # backend/apps/api/views.py  — update ProductViewSet
@@ -1207,7 +1223,7 @@ def register(request):
     business_name = request.data.get("business_name", "").strip()
     phone_number = request.data.get("phone_number", "").strip()
     country = _normalize_country(request.data.get("country", ""))
-    currency = _normalize_currency(request.data.get("currency", "") or "USD")
+    currency = _currency_for_country(country)
     email_notifications_enabled = bool(request.data.get("email_notifications_enabled", True))
     telegram_requested = bool(request.data.get("telegram_enabled", False))
     preferred_channel = (request.data.get("preferred_channel", User.CHANNEL_EMAIL) or User.CHANNEL_EMAIL).strip().lower()
@@ -1901,8 +1917,10 @@ def profile(request):
             if field == "country":
                 value = _normalize_country(value)
             if field == "currency":
-                value = _normalize_currency(value or "USD")
+                continue
             setattr(user, field, value)
+            if field == "country":
+                user.currency = _currency_for_country(value)
     user.save()
     return Response({"status": "updated"})
 

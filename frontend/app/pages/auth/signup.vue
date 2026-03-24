@@ -2,7 +2,7 @@
 definePageMeta({ auth: false })
 
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../../constants/site"
-import { countryOptions, currencyOptions } from "../../constants/markets"
+import { countryOptions, currencyForCountry, currencyLabel } from "../../constants/markets"
 
 const config = useRuntimeConfig()
 const router = useRouter()
@@ -16,7 +16,6 @@ const form = reactive({
   business_type: "",
   phone_number: "",
   country: "",
-  currency: "USD",
   email_notifications_enabled: true,
   preferred_channel: "email",
   terms_accepted: false,
@@ -29,6 +28,8 @@ const showConfirmPassword = ref(false)
 const fieldErrors = reactive<Record<string, string>>({})
 
 const termsVersion = "placeholder-v1"
+const derivedCurrency = computed(() => currencyForCountry(form.country))
+const derivedCurrencyLabel = computed(() => currencyLabel(derivedCurrency.value))
 
 const clearErrors = () => {
   error.value = ""
@@ -64,7 +65,7 @@ const signUp = async () => {
         business_type: form.business_type,
         phone_number: form.phone_number,
         country: form.country,
-        currency: form.currency,
+        currency: derivedCurrency.value,
         email_notifications_enabled: form.email_notifications_enabled,
         telegram_enabled: form.preferred_channel === "telegram",
         preferred_channel: form.preferred_channel,
@@ -189,11 +190,8 @@ useHead({ title: "Create account - SiloXR" })
 
         <div class="field">
           <label class="field__label">Currency</label>
-          <select v-model="form.currency" class="field__input">
-            <option v-for="option in currencyOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <input class="field__input" type="text" :value="derivedCurrencyLabel" disabled />
+          <span class="field__hint">Currency is set automatically from your country.</span>
         </div>
       </div>
 

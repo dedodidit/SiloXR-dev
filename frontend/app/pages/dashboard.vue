@@ -33,9 +33,6 @@ const potentialWeeklyGap = computed(() =>
 const observedRisk = computed(() => Number(summary.value?.revenue_at_risk_total ?? 0))
 const withinNewUserWindow = computed(() => Number(daysSinceSignup.value ?? 999) < 3)
 const summaryCurrency = computed(() => String(summary.value?.user_context?.currency || "USD").toUpperCase())
-const shouldShowStarterActions = computed(() =>
-  withinNewUserWindow.value || Number(summary.value?.total_products ?? 0) === 0
-)
 const uploadLimitCopy = computed(() =>
   summary.value?.is_pro
     ? "Pro plan upload size is unlimited for CSV and Excel imports."
@@ -156,6 +153,30 @@ function formatNaira(value: number) {
         <p class="dashboard-home__subtitle">
           Decision workspaces are ready. Start with the view that matches what you want to resolve next.
         </p>
+
+        <div class="dashboard-home__starter dashboard-home__starter--hero">
+          <div class="dashboard-home__starter-copy">
+            <p class="dashboard-home__starter-eyebrow">First actions</p>
+            <h2 class="dashboard-home__starter-title">Add your first products or import your existing records</h2>
+            <p class="dashboard-home__starter-text">
+              Start with manual entry if you want to set up a few products quickly, or import an Excel or CSV file if you already have operating data ready.
+            </p>
+            <span class="dashboard-home__starter-meta">{{ uploadLimitCopy }}</span>
+          </div>
+
+          <div class="dashboard-home__starter-actions">
+            <NuxtLink to="/onboarding" class="dashboard-home__starter-card dashboard-home__starter-card--primary">
+              <span class="dashboard-home__starter-tag">Manual setup</span>
+              <strong>Add products and first sales manually</strong>
+              <span>Use guided setup to create products, verify stock, and record the first live operating signals.</span>
+            </NuxtLink>
+            <NuxtLink to="/upload" class="dashboard-home__starter-card dashboard-home__starter-card--secondary">
+              <span class="dashboard-home__starter-tag">File import</span>
+              <strong>Upload an Excel or CSV file</strong>
+              <span>Bring in existing product, stock, or sales history in one step instead of typing everything from scratch.</span>
+            </NuxtLink>
+          </div>
+        </div>
       </div>
 
       <div class="dashboard-home__hero-stats">
@@ -167,50 +188,25 @@ function formatNaira(value: number) {
           <span class="dashboard-home__mini-label">Confidence</span>
           <strong>{{ Math.round((summary?.avg_confidence ?? 0) * 100) }}%</strong>
         </div>
-      </div>
-    </section>
+        <div class="dashboard-home__status dashboard-home__status--hero">
+          <div class="dashboard-home__status-copy">
+            <span class="dashboard-home__mini-label">Business status</span>
+            <h2 class="dashboard-home__status-title">{{ statusTitle }}</h2>
+            <p class="dashboard-home__status-text">{{ statusCopy }}</p>
+            <span class="dashboard-home__status-meta">{{ statusMeta }}</span>
+          </div>
 
-    <section class="dashboard-home__status surface">
-      <div class="dashboard-home__status-copy">
-        <p class="dashboard-home__eyebrow">Business status</p>
-        <h2 class="dashboard-home__status-title">{{ statusTitle }}</h2>
-        <p class="dashboard-home__status-text">{{ statusCopy }}</p>
-        <span class="dashboard-home__status-meta">{{ statusMeta }}</span>
-      </div>
-
-      <div
-        class="dashboard-home__status-signal"
-        :class="{
-          'dashboard-home__status-signal--down': statusDirection === 'down',
-          'dashboard-home__status-signal--up': statusDirection === 'up',
-          'dashboard-home__status-signal--dash': statusDirection === 'dash',
-        }"
-      >
-        {{ statusLabel }}
-      </div>
-    </section>
-
-    <section v-if="shouldShowStarterActions" class="dashboard-home__starter surface">
-      <div class="dashboard-home__starter-copy">
-        <p class="dashboard-home__eyebrow">First actions</p>
-        <h2 class="dashboard-home__status-title">Add your first products or import your existing records</h2>
-        <p class="dashboard-home__status-text">
-          Start with manual entry if you want to set up a few products quickly, or import an Excel or CSV file if you already have operating data ready.
-        </p>
-        <span class="dashboard-home__status-meta">{{ uploadLimitCopy }}</span>
-      </div>
-
-      <div class="dashboard-home__starter-actions">
-        <NuxtLink to="/onboarding" class="dashboard-home__starter-card">
-          <span class="dashboard-home__starter-tag">Manual setup</span>
-          <strong>Add products and first sales manually</strong>
-          <span>Use guided setup to create products, verify stock, and record the first live operating signals.</span>
-        </NuxtLink>
-        <NuxtLink to="/upload" class="dashboard-home__starter-card">
-          <span class="dashboard-home__starter-tag">File import</span>
-          <strong>Upload an Excel or CSV file</strong>
-          <span>Bring in existing product, stock, or sales history in one step instead of typing everything from scratch.</span>
-        </NuxtLink>
+          <div
+            class="dashboard-home__status-signal"
+            :class="{
+              'dashboard-home__status-signal--down': statusDirection === 'down',
+              'dashboard-home__status-signal--up': statusDirection === 'up',
+              'dashboard-home__status-signal--dash': statusDirection === 'dash',
+            }"
+          >
+            {{ statusLabel }}
+          </div>
+        </div>
       </div>
     </section>
 
@@ -244,7 +240,6 @@ function formatNaira(value: number) {
 }
 
 .dashboard-home__hero,
-.dashboard-home__status,
 .dashboard-home__starter,
 .dashboard-home__loading {
   padding: 28px;
@@ -306,10 +301,25 @@ function formatNaira(value: number) {
   color: var(--text-3);
 }
 
+.dashboard-home__starter--hero {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--purple) 28%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--purple) 13%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 94%, transparent)),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--icon-accent) 22%, transparent), transparent 42%),
+    radial-gradient(circle at bottom left, color-mix(in srgb, var(--purple) 16%, transparent), transparent 38%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--bg-card) 72%, white 28%),
+    0 18px 36px color-mix(in srgb, var(--purple) 12%, transparent);
+}
+
 .dashboard-home__hero-stats {
   display: grid;
   gap: 12px;
-  min-width: 180px;
+  min-width: 260px;
+  align-content: start;
 }
 
 .dashboard-home__mini-stat {
@@ -342,25 +352,34 @@ function formatNaira(value: number) {
   align-items: center;
 }
 
+.dashboard-home__status--hero {
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 95%, transparent), color-mix(in srgb, var(--bg-card) 90%, transparent)),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent, #534ab7) 10%, transparent), transparent 42%);
+}
+
 .dashboard-home__status-title {
-  margin: 0;
-  font-size: 24px;
+  margin: 2px 0 0;
+  font-size: 20px;
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
 }
 
 .dashboard-home__status-text {
-  margin: 10px 0 0;
-  max-width: 56ch;
-  font-size: 14px;
-  line-height: 1.7;
+  margin: 8px 0 0;
+  max-width: 40ch;
+  font-size: 13px;
+  line-height: 1.65;
   color: var(--text-3);
 }
 
 .dashboard-home__status-meta {
   display: inline-flex;
-  margin-top: 14px;
+  margin-top: 12px;
   padding: 7px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
@@ -371,12 +390,12 @@ function formatNaira(value: number) {
 
 .dashboard-home__status-signal {
   display: inline-flex;
-  min-width: 110px;
-  min-height: 110px;
+  min-width: 84px;
+  min-height: 84px;
   align-items: center;
   justify-content: center;
-  border-radius: 30px;
-  font-size: 52px;
+  border-radius: 24px;
+  font-size: 40px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -398,38 +417,82 @@ function formatNaira(value: number) {
   color: var(--text-3);
 }
 
-.dashboard-home__starter {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
-  gap: 20px;
-  align-items: start;
-}
-
 .dashboard-home__starter-actions {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.dashboard-home__starter-eyebrow {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--purple);
+}
+
+.dashboard-home__starter-title {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 28px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.dashboard-home__starter-text {
+  margin: 10px 0 0;
+  max-width: 64ch;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+
+.dashboard-home__starter-meta {
+  display: inline-flex;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--purple) 14%, transparent);
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .dashboard-home__starter-card {
   display: grid;
-  gap: 8px;
-  padding: 16px 18px;
-  border-radius: 18px;
+  gap: 10px;
+  padding: 18px 18px 17px;
+  border-radius: 20px;
   border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
   text-decoration: none;
   color: var(--text);
-  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg-card) 72%, white 28%);
+}
+
+.dashboard-home__starter-card--primary {
+  border-color: color-mix(in srgb, var(--purple) 34%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--purple) 15%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 96%, transparent));
+}
+
+.dashboard-home__starter-card--secondary {
+  border-color: color-mix(in srgb, var(--icon-accent) 28%, var(--border-subtle));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--icon-accent) 12%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 96%, transparent));
 }
 
 .dashboard-home__starter-card:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-  border-color: color-mix(in srgb, var(--accent, #534ab7) 24%, var(--border-subtle));
+  transform: translateY(-2px);
+  box-shadow: 0 18px 30px color-mix(in srgb, var(--accent, #534ab7) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #534ab7) 38%, var(--border-subtle));
 }
 
 .dashboard-home__starter-card strong {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.35;
 }
 
@@ -441,10 +504,10 @@ function formatNaira(value: number) {
 
 .dashboard-home__starter-tag {
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .08em;
+  font-weight: 800;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--text-2);
 }
 
 .dashboard-home__loading {
@@ -482,13 +545,16 @@ function formatNaira(value: number) {
 
 @media (max-width: 900px) {
   .dashboard-home__hero,
-  .dashboard-home__status,
-  .dashboard-home__starter {
+  .dashboard-home__status {
     grid-template-columns: 1fr;
   }
 
   .dashboard-home__hero-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-home__starter-actions {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-home__status-signal {
@@ -504,15 +570,22 @@ function formatNaira(value: number) {
   }
 
   .dashboard-home__hero,
-  .dashboard-home__status,
-  .dashboard-home__starter,
   .dashboard-home__loading {
     padding: 22px;
     border-radius: 22px;
   }
 
+  .dashboard-home__starter--hero {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
   .dashboard-home__hero-stats {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-home__status--hero {
+    padding: 14px;
   }
 }
 </style>
