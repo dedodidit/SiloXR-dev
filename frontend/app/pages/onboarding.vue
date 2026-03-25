@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { formatMoney } from "../constants/markets"
-
 definePageMeta({ auth: true })
 
 const router = useRouter()
@@ -38,31 +36,38 @@ const displayName = computed(() => {
 
 const activeStep = computed(() => progress.value.step)
 const progressLabel = computed(() => `Step ${activeStep.value} of 3`)
-const currency = computed(() => String(currentUser.value?.currency || "USD").toUpperCase())
 const hasEstimatedStock = computed(() => progress.value.estimatedStock !== "" && Number(progress.value.estimatedStock) >= 0)
-
-const insightAmount = computed(() => {
-  const estimatedStock = Number(progress.value.estimatedStock || 0)
-  const baselineGap = hasEstimatedStock.value ? Math.max(estimatedStock < 12 ? 120000 : 48000, 24000) : 120000
-  return formatMoney(baselineGap, currency.value)
-})
 
 const insightHeadline = computed(() => {
   const productName = progress.value.productName || "this product"
-  return `You may be losing ${insightAmount.value}/week from ${productName}`
+  return `${productName} is now being tracked by SiloXR`
 })
 
 const insightDetail = computed(() => {
   if (hasEstimatedStock.value) {
-    return `Your first setup suggests ${progress.value.productName} could enter a tighter stock zone sooner than expected if demand keeps moving at the current pace.`
+    return `Your first product is in the system with an opening stock signal, so SiloXR can start turning new stock and sales activity into clearer decisions.`
   }
-  return `Even with one product, SiloXR can start watching for understocking patterns as you add live stock or sales activity.`
+  return `Your first product is in the system. Add a stock count or sale from the dashboard and SiloXR will start building a stronger operating read from that signal.`
+})
+
+const onboardingHighlights = computed(() => {
+  const productName = progress.value.productName || "Your product"
+  const items = [
+    `${productName} is ready inside Product Operations.`,
+    "Your dashboard workspaces are now primed for live inventory signals.",
+  ]
+  if (hasEstimatedStock.value && !stockCaptureDeferred.value) {
+    items.push("Your opening stock count has been captured.")
+  } else {
+    items.push("Your next best move is to verify stock from the dashboard.")
+  }
+  return items
 })
 
 const insightNote = computed(() =>
   stockCaptureDeferred.value
-    ? "Your product is ready. Add a stock update from the dashboard to sharpen this first insight."
-    : "This is an early read to help you see value immediately. It becomes more precise as you record stock updates and sales."
+    ? "We kept setup moving. Verify stock or record a sale next, and SiloXR will start sharpening product-level guidance."
+    : "Keep recording stock updates and sales, and SiloXR will turn those signals into better decision support."
 )
 
 const goToStep = (step: 1 | 2 | 3) => {
@@ -302,9 +307,10 @@ useHead({ title: "Get started - SiloXR" })
           </div>
 
           <OnboardingInsightCard
+            eyebrow="Setup complete"
             :headline="insightHeadline"
-            :amount="insightAmount"
             :detail="insightDetail"
+            :highlights="onboardingHighlights"
             :note="insightNote"
           />
 

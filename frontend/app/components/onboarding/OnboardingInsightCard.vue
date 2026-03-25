@@ -1,18 +1,21 @@
 <script setup lang="ts">
 defineProps<{
+  eyebrow?: string
   headline: string
-  amount: string
   detail: string
   note: string
+  highlights?: string[]
 }>()
 </script>
 
 <template>
   <section class="insight-card">
-    <p class="insight-card__eyebrow">Immediate insight</p>
+    <p class="insight-card__eyebrow">{{ eyebrow || "Setup complete" }}</p>
     <h3 class="insight-card__headline">{{ headline }}</h3>
-    <div class="insight-card__amount">{{ amount }}</div>
     <p class="insight-card__detail">{{ detail }}</p>
+    <ul v-if="highlights?.length" class="insight-card__list">
+      <li v-for="item in highlights" :key="item">{{ item }}</li>
+    </ul>
     <p class="insight-card__note">{{ note }}</p>
   </section>
 </template>
@@ -44,18 +47,21 @@ defineProps<{
   letter-spacing: -0.03em;
   color: var(--text);
 }
-.insight-card__amount {
-  font-size: clamp(28px, 5vw, 42px);
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  color: #185FA5;
-}
 .insight-card__detail,
 .insight-card__note {
   margin: 0;
   font-size: 14px;
   line-height: 1.65;
   color: var(--text-2);
+}
+.insight-card__list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
 }
 .insight-card__note {
   color: var(--text-3);
