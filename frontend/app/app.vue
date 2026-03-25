@@ -19,7 +19,7 @@ const isDashboard   = computed(() => route.path === "/dashboard")
 const isWorkspace   = computed(() => route.path.startsWith("/workspace/"))
 const showSidebar   = computed(() => isWorkspace.value && showHeader.value)
 const isPublicMarketing = computed(() => route.path === "/" || route.path.startsWith("/landing"))
-const showHeader    = computed(() => !isAuthPage.value && !isPublicMarketing.value && !!token.value)
+const showHeader    = computed(() => !isAuthPage.value && !isPublicMarketing.value && !isOnboardPage.value && !!token.value)
 const siteUrl = computed(() => String(runtimeConfig.public.siteUrl || "https://siloxr.com").replace(/\/+$/, ""))
 const canonicalUrl = computed(() => {
   const path = route.path === "/" ? "/" : route.path.replace(/\/+$/, "") || "/"
