@@ -47,7 +47,7 @@ const signUp = async () => {
   try {
     const username = buildUsername(form.email)
 
-    await $fetch(`${config.public.apiBase}/auth/register/`, {
+    const registration = await $fetch<{ welcome_email_sent?: boolean }>(`${config.public.apiBase}/auth/register/`, {
       method: "POST",
       body: {
         username,
@@ -69,7 +69,7 @@ const signUp = async () => {
       `${config.public.apiBase}/auth/login/`,
       {
         method: "POST",
-        body: { identifier: form.email, password: form.password },
+        body: { identifier: form.email, password: form.password, suppress_login_email: true },
       }
     )
 
@@ -85,6 +85,10 @@ const signUp = async () => {
         email: form.email,
         business_name: form.business_name,
       }
+    }
+
+    if (process.client) {
+      sessionStorage.setItem("siloxr-signup-welcome-email", registration?.welcome_email_sent ? "sent" : "pending")
     }
 
     await router.push("/onboarding?welcome=1")

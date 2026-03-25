@@ -1582,6 +1582,7 @@ def login(request):
 
     identifier = request.data.get("identifier", "").strip()
     password = request.data.get("password", "")
+    suppress_login_email = bool(request.data.get("suppress_login_email", False))
 
     if not identifier or not password:
         return Response(
@@ -1603,16 +1604,18 @@ def login(request):
 
     refresh = RefreshToken.for_user(user)
     login_email_sent = False
-    try:
-        login_email_sent = _send_login_email(user)
-    except Exception as exc:
-        logger.error("Login email failed for %s: %s", user.email, exc, exc_info=True)
+    if not suppress_login_email:
+        try:
+            login_email_sent = _send_login_email(user)
+        except Exception as exc:
+            logger.error("Login email failed for %s: %s", user.email, exc, exc_info=True)
 
     return Response(
         {
             "access": str(refresh.access_token),
             "refresh": str(refresh),
             "login_email_sent": login_email_sent,
+            "login_email_suppressed": suppress_login_email,
         }
     )
 
