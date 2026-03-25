@@ -153,6 +153,7 @@ const saveFirstProduct = async () => {
         quantity: Number(progress.value.estimatedStock),
         verified_quantity: Number(progress.value.estimatedStock),
         notes: "First product setup",
+        occurred_at: new Date().toISOString(),
       })
     }
 
