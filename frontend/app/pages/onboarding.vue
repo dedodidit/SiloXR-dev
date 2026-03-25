@@ -6,7 +6,7 @@ definePageMeta({ auth: true })
 const router = useRouter()
 const route = useRoute()
 const { $api } = useNuxtApp()
-const { createProduct, recordEvent } = useInventory()
+const { createProduct, fetchProducts, recordEvent } = useInventory()
 
 const currentUser = useState<any | null>("current-user", () => null)
 const userKey = computed(() =>
@@ -107,6 +107,22 @@ const buildSku = (name: string) => {
   return `${base}-${Date.now().toString(36).toUpperCase().slice(-4)}`
 }
 
+const resolveCreatedProductId = async (created: any, sku: string) => {
+  const directId = created?.id || created?.data?.id || created?.result?.id
+  if (directId) return String(directId)
+
+  const directSku = String(created?.sku || created?.data?.sku || created?.result?.sku || "").toUpperCase()
+  if (directSku === sku) {
+    const lookup = await fetchProducts().catch(() => null)
+    const matched = lookup?.results?.find((item) => String(item.sku || "").toUpperCase() === sku)
+    if (matched?.id) return String(matched.id)
+  }
+
+  const lookup = await fetchProducts().catch(() => null)
+  const matched = lookup?.results?.find((item) => String(item.sku || "").toUpperCase() === sku)
+  return matched?.id ? String(matched.id) : ""
+}
+
 const saveFirstProduct = async () => {
   if (!progress.value.productName.trim()) {
     error.value = "Add a product name so SiloXR has something to work with."
@@ -117,16 +133,22 @@ const saveFirstProduct = async () => {
   error.value = ""
 
   try {
+    const sku = buildSku(progress.value.productName)
     const created = await createProduct({
       name: progress.value.productName.trim(),
-      sku: buildSku(progress.value.productName),
+      sku,
       unit: "units",
       reorder_point: 0,
       reorder_quantity: 0,
     })
 
+    const productId = await resolveCreatedProductId(created, sku)
+    if (!productId) {
+      throw new Error("Your product was created, but we couldn't confirm it yet. Please try again.")
+    }
+
     if (hasEstimatedStock.value) {
-      await recordEvent(created.id, {
+      await recordEvent(productId, {
         event_type: "STOCK_COUNT",
         quantity: Number(progress.value.estimatedStock),
         verified_quantity: Number(progress.value.estimatedStock),
@@ -136,7 +158,7 @@ const saveFirstProduct = async () => {
 
     save({
       step: 3,
-      productId: created.id,
+      productId,
       completed: true,
     })
     productCreated.value = true
