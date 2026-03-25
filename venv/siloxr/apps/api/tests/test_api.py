@@ -96,6 +96,18 @@ class TestProductEndpoints(APITestBase):
         })
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_stock_count_event_can_use_verified_quantity_as_quantity(self):
+        self.auth_pro()
+        url  = f"/api/v1/products/{self.product.id}/events/"
+        resp = self.client.post(url, {
+            "event_type": "STOCK_COUNT",
+            "verified_quantity": 24,
+            "occurred_at": timezone.now().isoformat(),
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.last_verified_quantity, 24)
+
     def test_soft_delete_preserves_event_history(self):
         self.auth_pro()
         processor = EventProcessor(self.product)

@@ -17,6 +17,7 @@ const { progress, load, save, reset } = useOnboardingProgress(userKey)
 const saving = ref(false)
 const error = ref("")
 const productCreated = ref(false)
+const stockCaptureDeferred = ref(false)
 
 const businessOptions = [
   { value: "retail", label: "Retail" },
@@ -59,7 +60,9 @@ const insightDetail = computed(() => {
 })
 
 const insightNote = computed(() =>
-  "This is an early read to help you see value immediately. It becomes more precise as you record stock updates and sales."
+  stockCaptureDeferred.value
+    ? "Your product is ready. Add a stock update from the dashboard to sharpen this first insight."
+    : "This is an early read to help you see value immediately. It becomes more precise as you record stock updates and sales."
 )
 
 const goToStep = (step: 1 | 2 | 3) => {
@@ -147,14 +150,18 @@ const saveFirstProduct = async () => {
       throw new Error("Your product was created, but we couldn't confirm it yet. Please try again.")
     }
 
+    stockCaptureDeferred.value = false
     if (hasEstimatedStock.value) {
-      await recordEvent(productId, {
-        event_type: "STOCK_COUNT",
-        quantity: Number(progress.value.estimatedStock),
-        verified_quantity: Number(progress.value.estimatedStock),
-        notes: "First product setup",
-        occurred_at: new Date().toISOString(),
-      })
+      try {
+        await recordEvent(productId, {
+          event_type: "STOCK_COUNT",
+          verified_quantity: Number(progress.value.estimatedStock),
+          notes: "First product setup",
+          occurred_at: new Date().toISOString(),
+        })
+      } catch {
+        stockCaptureDeferred.value = true
+      }
     }
 
     save({
@@ -303,7 +310,13 @@ useHead({ title: "Get started - SiloXR" })
 
           <div class="onboarding-success">
             <strong>{{ productCreated ? "Your first product is live." : "Your onboarding progress is saved." }}</strong>
-            <span>Next, head to the dashboard to see focused workspaces and record your next stock or sales update.</span>
+            <span>
+              {{
+                stockCaptureDeferred
+                  ? "We couldn't verify stock during setup, but your product is ready. Head to the dashboard and add a stock update there."
+                  : "Next, head to the dashboard to see focused workspaces and record your next stock or sales update."
+              }}
+            </span>
           </div>
 
           <div class="onboarding-actions">

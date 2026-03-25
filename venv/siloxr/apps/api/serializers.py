@@ -239,6 +239,8 @@ class InventoryEventCreateSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             "client_event_id": {"validators": []},
+            "quantity": {"required": False},
+            "occurred_at": {"required": False},
         }
 
     def validate(self, data):
@@ -247,6 +249,12 @@ class InventoryEventCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"verified_quantity": "Required for STOCK_COUNT events."}
                 )
+            if data.get("quantity") in (None, ""):
+                data["quantity"] = float(data["verified_quantity"])
+        elif data.get("quantity") in (None, ""):
+            raise serializers.ValidationError(
+                {"quantity": "Quantity is required for this event type."}
+            )
         if data.get("quantity", 0) < 0:
             raise serializers.ValidationError(
                 {"quantity": "Quantity must be positive. Direction is set by event_type."}
