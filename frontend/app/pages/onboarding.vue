@@ -303,7 +303,6 @@ useHead({ title: "Get started - SiloXR" })
           <div class="onboarding-panel__copy">
             <p class="onboarding-panel__eyebrow">Step 3</p>
             <h2>Your first insight is ready</h2>
-            <p>SiloXR now has enough context to start guiding the next move. This gets sharper as you add real activity.</p>
           </div>
 
           <OnboardingInsightCard
