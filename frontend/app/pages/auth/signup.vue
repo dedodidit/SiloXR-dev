@@ -2,6 +2,7 @@
 definePageMeta({ auth: false })
 
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../../constants/site"
+import { countryOptions } from "../../constants/markets"
 
 const config = useRuntimeConfig()
 const router = useRouter()
@@ -11,6 +12,7 @@ const form = reactive({
   email: "",
   password: "",
   business_name: "",
+  country: "",
 })
 
 const loading = ref(false)
@@ -54,7 +56,7 @@ const signUp = async () => {
         business_name: form.business_name,
         business_type: "",
         phone_number: "",
-        country: "",
+        country: form.country,
         email_notifications_enabled: true,
         telegram_enabled: false,
         preferred_channel: "email",
@@ -88,11 +90,12 @@ const signUp = async () => {
     await router.push("/onboarding?welcome=1")
   } catch (e: any) {
     const data = e?.data ?? {}
-    const firstDetail = data.detail || data.email?.[0] || data.password?.[0] || "We couldn't create your account."
+    const firstDetail = data.detail || data.email?.[0] || data.password?.[0] || data.country?.[0] || "We couldn't create your account."
 
     error.value = firstDetail
     if (Array.isArray(data.email)) fieldErrors.email = data.email[0]
     if (Array.isArray(data.password)) fieldErrors.password = data.password[0]
+    if (Array.isArray(data.country)) fieldErrors.country = data.country[0]
   } finally {
     loading.value = false
   }
@@ -153,6 +156,22 @@ useHead({ title: "Create free account - SiloXR" })
           type="text"
           placeholder="Your business name"
         />
+      </div>
+
+      <div class="field">
+        <label class="field__label">Country</label>
+        <select v-model="form.country" class="field__input" required>
+          <option
+            v-for="option in countryOptions"
+            :key="option.value || 'blank-country'"
+            :value="option.value"
+            :disabled="option.value === ''"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+        <span class="field__hint">We use this to set your currency and local operating defaults.</span>
+        <span v-if="fieldErrors.country" class="field__error">{{ fieldErrors.country }}</span>
       </div>
 
       <div class="signup-note">
@@ -216,6 +235,11 @@ useHead({ title: "Create free account - SiloXR" })
 .field__optional {
   color: var(--text-3);
   font-weight: 600;
+}
+.field__hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 .field__input-wrap {
   position: relative;
