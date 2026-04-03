@@ -1,4 +1,5 @@
 # backend/apps/api/views.py
+import hashlib
 from datetime import timedelta
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -62,6 +63,18 @@ def _get_telegram_bot_username() -> str:
 
     bot_user = str(raw_value).strip().lstrip("@")
     return bot_user
+
+
+def _generate_telegram_link_token(user) -> str:
+    """
+    Generate a short-lived Telegram linking token without depending on the
+    notifications module import path.
+    """
+    token = hashlib.sha256(
+        f"{user.id}{timezone.now().timestamp()}".encode()
+    ).hexdigest()[:12].upper()
+    cache.set(f"telegram_link:{token}", str(user.id), timeout=1800)
+    return token
 
 
 def _maybe_send_automated_product_update_reminder(user) -> None:
@@ -1537,9 +1550,7 @@ def register(request):
     telegram_bot_user = ""
     if telegram_requested or preferred_channel == User.CHANNEL_TELEGRAM:
         try:
-            from apps.notifications.telegram import generate_link_token
-
-            token = generate_link_token(user)
+            token = _generate_telegram_link_token(user)
             telegram_bot_user = _get_telegram_bot_username() or "siloxr_bot"
             telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
         except Exception as exc:
@@ -2354,9 +2365,7 @@ def telegram_link_token(request):
         )
 
     try:
-        from apps.notifications.telegram import generate_link_token
-
-        token = generate_link_token(request.user)
+        token = _generate_telegram_link_token(request.user)
     except Exception as exc:
         logger.error("Telegram link generation failed for %s: %s", request.user.username, exc, exc_info=True)
         return Response(
