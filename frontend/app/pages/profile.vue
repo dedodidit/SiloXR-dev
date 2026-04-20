@@ -51,6 +51,16 @@ const hydrateProfile = async () => {
     whatsapp_critical_only: !!user.value.whatsapp_critical_only,
   })
   phoneInput.value = user.value.phone_number || ""
+  telegramLink.value = user.value.telegram_link
+    ? {
+        link: user.value.telegram_link,
+        token: user.value.telegram_link.split("start=").pop() || "",
+        bot_user: user.value.telegram_bot_user || "",
+      }
+    : null
+  if (!user.value.telegram_link && user.value.telegram_link_error) {
+    msg.value = user.value.telegram_link_error
+  }
 }
 
 onMounted(hydrateProfile)
@@ -136,7 +146,20 @@ const getTelegramLink = async () => {
       msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
     }
   } catch (e: any) {
-    msg.value = e?.data?.detail ?? "Could not generate Telegram link."
+    const fallbackLink = user.value?.telegram_link
+    if (fallbackLink) {
+      telegramLink.value = {
+        link: fallbackLink,
+        token: fallbackLink.split("start=").pop() || "",
+        bot_user: user.value?.telegram_bot_user || "",
+      }
+      if (process.client && telegramLink.value?.link) {
+        window.open(telegramLink.value.link, "_blank", "noopener,noreferrer")
+        msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
+        return
+      }
+    }
+    msg.value = e?.data?.detail ?? user.value?.telegram_link_error ?? "Could not generate Telegram link."
   } finally {
     telegramLinking.value = false
   }
@@ -264,6 +287,9 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
             </a>
             <p class="field__hint" style="margin-top:8px">Link expires in 30 minutes. Code: {{ telegramLink.token }}</p>
           </div>
+          <p v-else-if="user?.telegram_link_error" class="profile-msg profile-msg--err" style="margin-top:12px">
+            {{ user.telegram_link_error }}
+          </p>
         </div>
 
         <div class="field" style="margin-top:16px">

@@ -281,6 +281,18 @@ class TestTelegramLinkEndpoint(APITestBase):
         self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertEqual(resp.data["detail"], "Telegram linking is not configured yet.")
 
+    @override_settings(TELEGRAM_BOT_USERNAME="siloxr_bot")
+    def test_profile_includes_telegram_link_for_unlinked_user(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/profile/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("telegram_link", resp.data)
+        self.assertTrue(resp.data["telegram_link"].startswith("https://t.me/siloxr_bot?start="))
+        self.assertIn("telegram_bot_user", resp.data)
+        self.assertEqual(resp.data["telegram_bot_user"], "siloxr_bot")
+
 
 class TestNotificationStatusEndpoint(APITestBase):
 

@@ -2123,6 +2123,20 @@ def profile(request):
         _maybe_send_automated_product_update_reminder(user)
         telegram_profile = getattr(user, "telegram_profile", None)
         telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
+        telegram_link = ""
+        telegram_bot_user = ""
+        telegram_link_error = ""
+        if not telegram_linked:
+            try:
+                telegram_bot_user = _get_telegram_bot_username()
+                if telegram_bot_user:
+                    token = _generate_telegram_link_token(user)
+                    telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
+                else:
+                    telegram_link_error = "Telegram linking is not configured yet."
+            except Exception as exc:
+                logger.warning("Telegram link prebuild failed for %s: %s", user.username, exc, exc_info=True)
+                telegram_link_error = "Could not generate Telegram link right now."
         return Response({
             "id":                           str(user.id),
             "username":                     user.username,
@@ -2143,6 +2157,9 @@ def profile(request):
             "is_pro":                       user.is_pro,
             "date_joined":                  user.date_joined,
             "telegram_download_url":        "https://telegram.org/dl",
+            "telegram_bot_user":            telegram_bot_user,
+            "telegram_link":                telegram_link,
+            "telegram_link_error":          telegram_link_error,
         })
 
     # PATCH — update allowed fields
