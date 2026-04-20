@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../constants/site"
+import { countryOptions, currencyForCountry, currencyLabel } from "../constants/markets"
 
 const { $api } = useNuxtApp()
 
@@ -16,11 +17,15 @@ const verifying = ref(false)
 const phoneInput = ref("")
 const telegramLinking = ref(false)
 const telegramLink = ref<any>(null)
+const showOldPassword = ref(false)
+const showNewPassword = ref(false)
+const showConfirmPassword = ref(false)
 
 const form = reactive({
   business_name: "",
   business_type: "",
   phone_number: "",
+  country: "",
   email_notifications_enabled: true,
   telegram_enabled: false,
   preferred_channel: "email",
@@ -28,6 +33,8 @@ const form = reactive({
 })
 
 const pwdForm = reactive({ old_password: "", new_password: "", confirm: "" })
+const derivedCurrency = computed(() => currencyForCountry(form.country || user.value?.country || ""))
+const derivedCurrencyLabel = computed(() => currencyLabel(derivedCurrency.value))
 
 const hydrateProfile = async () => {
   user.value = await $api("/profile/").catch(() => null)
@@ -37,12 +44,23 @@ const hydrateProfile = async () => {
     business_name: user.value.business_name,
     business_type: user.value.business_type,
     phone_number: user.value.phone_number,
+    country: user.value.country || "",
     email_notifications_enabled: user.value.email_notifications_enabled,
     telegram_enabled: !!user.value.telegram_enabled,
     preferred_channel: user.value.preferred_channel || "email",
     whatsapp_critical_only: !!user.value.whatsapp_critical_only,
   })
   phoneInput.value = user.value.phone_number || ""
+  telegramLink.value = user.value.telegram_link
+    ? {
+        link: user.value.telegram_link,
+        token: user.value.telegram_link.split("start=").pop() || "",
+        bot_user: user.value.telegram_bot_user || "",
+      }
+    : null
+  if (!user.value.telegram_link && user.value.telegram_link_error) {
+    msg.value = user.value.telegram_link_error
+  }
 }
 
 onMounted(hydrateProfile)
@@ -123,8 +141,25 @@ const getTelegramLink = async () => {
   msg.value = ""
   try {
     telegramLink.value = await $api("/telegram/link/")
+    if (process.client && telegramLink.value?.link) {
+      window.open(telegramLink.value.link, "_blank", "noopener,noreferrer")
+      msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
+    }
   } catch (e: any) {
-    msg.value = e?.data?.detail ?? "Could not generate Telegram link."
+    const fallbackLink = user.value?.telegram_link
+    if (fallbackLink) {
+      telegramLink.value = {
+        link: fallbackLink,
+        token: fallbackLink.split("start=").pop() || "",
+        bot_user: user.value?.telegram_bot_user || "",
+      }
+      if (process.client && telegramLink.value?.link) {
+        window.open(telegramLink.value.link, "_blank", "noopener,noreferrer")
+        msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
+        return
+      }
+    }
+    msg.value = e?.data?.detail ?? user.value?.telegram_link_error ?? "Could not generate Telegram link."
   } finally {
     telegramLinking.value = false
   }
@@ -176,6 +211,19 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
             </select>
           </div>
           <div class="field">
+            <label class="field__label">Country</label>
+            <select v-model="form.country" class="field__input">
+              <option v-for="option in countryOptions" :key="option.value || 'blank-country'" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label">Currency</label>
+            <input class="field__input" type="text" :value="derivedCurrencyLabel" disabled />
+            <span class="field__hint">Currency follows your selected country automatically.</span>
+          </div>
+          <div class="field">
             <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
               <input type="checkbox" v-model="form.email_notifications_enabled" />
               Receive decision alerts by email
@@ -219,7 +267,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
       <section class="profile-section surface">
         <h2 class="profile-section__title">Telegram notifications</h2>
         <p class="t-body" style="margin-bottom:14px">
-          Telegram must be linked to your SiloXR account before it can be used for real-time notifications.
+          Telegram must be linked to your SiloXR account before it can be used for real-time notifications. You can still change channel preference and delivery settings here any time.
         </p>
 
         <div v-if="user?.telegram_linked" class="profile-msg profile-msg--ok">
@@ -239,6 +287,9 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
             </a>
             <p class="field__hint" style="margin-top:8px">Link expires in 30 minutes. Code: {{ telegramLink.token }}</p>
           </div>
+          <p v-else-if="user?.telegram_link_error" class="profile-msg profile-msg--err" style="margin-top:12px">
+            {{ user.telegram_link_error }}
+          </p>
         </div>
 
         <div class="field" style="margin-top:16px">
@@ -273,15 +324,30 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
         <div class="profile-fields">
           <div class="field">
             <label class="field__label">Current password</label>
-            <input v-model="pwdForm.old_password" class="field__input" type="password" />
+            <div class="field__input-wrap">
+              <input v-model="pwdForm.old_password" class="field__input" :type="showOldPassword ? 'text' : 'password'" autocomplete="current-password" />
+              <button type="button" class="field__toggle" @click="showOldPassword = !showOldPassword">
+                {{ showOldPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
           </div>
           <div class="field">
             <label class="field__label">New password</label>
-            <input v-model="pwdForm.new_password" class="field__input" type="password" />
+            <div class="field__input-wrap">
+              <input v-model="pwdForm.new_password" class="field__input" :type="showNewPassword ? 'text' : 'password'" autocomplete="new-password" />
+              <button type="button" class="field__toggle" @click="showNewPassword = !showNewPassword">
+                {{ showNewPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
           </div>
           <div class="field">
             <label class="field__label">Confirm new password</label>
-            <input v-model="pwdForm.confirm" class="field__input" type="password" />
+            <div class="field__input-wrap">
+              <input v-model="pwdForm.confirm" class="field__input" :type="showConfirmPassword ? 'text' : 'password'" autocomplete="new-password" />
+              <button type="button" class="field__toggle" @click="showConfirmPassword = !showConfirmPassword">
+                {{ showConfirmPassword ? "Hide" : "Show" }}
+              </button>
+            </div>
           </div>
         </div>
         <p v-if="pwdMsg" class="profile-msg" :class="pwdMsg.includes('successfully') ? 'profile-msg--ok' : 'profile-msg--err'">
@@ -332,6 +398,9 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
   flex-direction: column;
   gap: 6px;
 }
+.field__input-wrap {
+  position: relative;
+}
 .field__label {
   font-size: 12px;
   font-weight: 600;
@@ -347,6 +416,18 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
   border-radius: 12px;
   background: var(--bg-card);
   color: var(--text);
+}
+.field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .profile-msg {
   font-size: 12px;

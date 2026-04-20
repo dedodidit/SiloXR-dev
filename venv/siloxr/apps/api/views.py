@@ -1,4 +1,5 @@
 # backend/apps/api/views.py
+import hashlib
 from datetime import timedelta
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -15,12 +16,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet, ViewSet
 from rest_framework.permissions import AllowAny
+from apps.billing.enums import FeatureFlag
+from apps.billing.services import FeatureGateService
 from apps.inventory.models import (
     DecisionLog, ForecastSnapshot, InventoryEvent, Product, ReorderRecord,
 )
 from apps.inventory.events import EventProcessor
 from .permissions import IsOwner
 from .serializers import (
+    BusinessHealthReportSerializer,
     BulkEventSyncSerializer,
     DashboardSummarySerializer,
     DecisionLogSerializer,
@@ -40,6 +44,191 @@ from apps.core.services.demand_deficit_service import analyze_product_deficits
 from apps.core.statistics import compute_cv, expected_shortage, get_distribution_params
 
 logger = logging.getLogger(__name__)
+FREE_UPLOAD_LIMIT_BYTES = 1 * 1024 * 1024
+
+
+def _get_telegram_bot_username() -> str:
+    """
+    Return a normalized Telegram bot username from settings.
+
+    This is intentionally defensive because misconfigured env values should
+    degrade Telegram linking gracefully instead of crashing authenticated
+    requests with a raw 500.
+    """
+    from django.conf import settings as djsettings
+
+    raw_value = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "")
+    if raw_value is None:
+        return ""
+
+    bot_user = str(raw_value).strip().lstrip("@")
+    return bot_user
+
+
+def _generate_telegram_link_token(user) -> str:
+    """
+    Generate a short-lived Telegram linking token without depending on the
+    notifications module import path.
+    """
+    token = hashlib.sha256(
+        f"{user.id}{timezone.now().timestamp()}".encode()
+    ).hexdigest()[:12].upper()
+    cache.set(f"telegram_link:{token}", str(user.id), timeout=1800)
+    return token
+
+
+def _maybe_send_automated_product_update_reminder(user) -> None:
+    """
+    Opportunistically trigger stale-product reminders during normal usage,
+    without relying on an external scheduler.
+    """
+    try:
+        from apps.notifications.reminders import maybe_send_automated_product_update_reminder
+
+        maybe_send_automated_product_update_reminder(user)
+    except Exception as exc:
+        logger.warning(
+            "Automated product reminder check failed for %s: %s",
+            getattr(user, "id", None),
+            exc,
+        )
+
+
+def _normalize_country(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _normalize_currency(value: str) -> str:
+    return (value or "").strip().upper()
+
+
+def _currency_for_country(country: str) -> str:
+    from apps.billing.services import PricingService
+
+    return PricingService.get_currency(country)
+
+
+def _current_plan(user) -> str:
+    return getattr(user, "current_plan", getattr(user, "tier", ""))
+
+
+def _user_has_feature(user, feature_flag: FeatureFlag) -> bool:
+    return FeatureGateService.has_access(_current_plan(user), feature_flag)
+
+
+def _feature_denied_response(plan: str, feature_name: str, required_plan: str) -> Response:
+    return Response(
+        {
+            "error": "plan_upgrade_required",
+            "detail": f"{feature_name} is not available on your current plan.",
+            "current_plan": plan,
+            "required_plan": required_plan,
+            "upgrade_url": "/billing/upgrade/",
+        },
+        status=status.HTTP_402_PAYMENT_REQUIRED,
+    )
+
+
+def _send_welcome_email(user, *, preferred_channel: str) -> bool:
+    next_step = (
+        "Telegram was selected as your preferred channel. We will open your Telegram linking step immediately after signup."
+        if preferred_channel == user.CHANNEL_TELEGRAM else
+        "Email updates are enabled for your account, so important SiloXR updates can reach you here."
+    )
+    subject = "Welcome to SiloXR"
+    text_body = (
+        f"Hi {user.username},\n\n"
+        f"Welcome to SiloXR.\n\n"
+        f"Your account has been created successfully.\n"
+        f"{next_step}\n\n"
+        f"If you need help, reply to {{from_email}}."
+    )
+    html_body = (
+        f"<p>Hi {user.username},</p>"
+        f"<p>Welcome to <strong>SiloXR</strong>.</p>"
+        f"<p>Your account has been created successfully.</p>"
+        f"<p>{next_step}</p>"
+        f"<p>If you need help, reply to {{from_email}}.</p>"
+    )
+    return _send_account_email(
+        user,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        log_context="Welcome email",
+    )
+
+
+def _email_delivery_ready() -> tuple[bool, str]:
+    from django.conf import settings as djsettings
+
+    backend = getattr(djsettings, "EMAIL_BACKEND", "")
+    if not backend:
+        return False, "Email backend is not configured."
+    if backend == "django.core.mail.backends.smtp.EmailBackend":
+        missing = []
+        if not getattr(djsettings, "EMAIL_HOST", ""):
+            missing.append("EMAIL_HOST")
+        if not getattr(djsettings, "EMAIL_HOST_USER", ""):
+            missing.append("EMAIL_HOST_USER")
+        if not getattr(djsettings, "EMAIL_HOST_PASSWORD", ""):
+            missing.append("EMAIL_HOST_PASSWORD")
+        if missing:
+            return False, f"Email settings are incomplete: {', '.join(missing)}."
+    return True, "Email delivery is configured."
+
+
+def _send_account_email(user, *, subject: str, text_body: str, html_body: str | None = None, log_context: str = "Account email") -> bool:
+    from django.conf import settings as djsettings
+    from django.core.mail import EmailMultiAlternatives
+
+    if not getattr(user, "email", ""):
+        logger.error("%s skipped because user has no email.", log_context)
+        return False
+
+    ready, detail = _email_delivery_ready()
+    if not ready:
+        logger.error("%s skipped for %s because %s", log_context, user.email, detail)
+        return False
+
+    message = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body.format(from_email=djsettings.DEFAULT_FROM_EMAIL),
+        from_email=djsettings.DEFAULT_FROM_EMAIL,
+        to=[user.email],
+        reply_to=[djsettings.DEFAULT_FROM_EMAIL],
+    )
+    if html_body:
+        message.attach_alternative(html_body.format(from_email=djsettings.DEFAULT_FROM_EMAIL), "text/html")
+    message.send(fail_silently=False)
+    return True
+
+
+def _send_login_email(user) -> bool:
+    if not getattr(user, "email_notifications_enabled", False):
+        return False
+
+    logged_in_at = timezone.localtime(timezone.now()).strftime("%b %d, %Y at %I:%M %p %Z")
+    subject = "SiloXR login alert"
+    text_body = (
+        f"Hi {user.username},\n\n"
+        f"We noticed a successful login to your SiloXR account on {logged_in_at}.\n\n"
+        f"If this was you, no action is needed.\n"
+        f"If this was not you, reset your password immediately or reply to {{from_email}}."
+    )
+    html_body = (
+        f"<p>Hi {user.username},</p>"
+        f"<p>We noticed a successful login to your <strong>SiloXR</strong> account on {logged_in_at}.</p>"
+        f"<p>If this was you, no action is needed.</p>"
+        f"<p>If this was not you, reset your password immediately or reply to {{from_email}}.</p>"
+    )
+    return _send_account_email(
+        user,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        log_context="Login email",
+    )
 
 
 # ── Products ───────────────────────────────────────────────────────────────────
@@ -68,6 +257,14 @@ class ProductViewSet(ModelViewSet):
         if self.action in ("create", "update", "partial_update"):
             return ProductCreateSerializer
         return ProductListSerializer
+
+    def list(self, request, *args, **kwargs):
+        _maybe_send_automated_product_update_reminder(request.user)
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        _maybe_send_automated_product_update_reminder(request.user)
+        return super().retrieve(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -242,6 +439,11 @@ class DecisionViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class   = DecisionLogSerializer
 
+    def _ensure_action_access(self, request):
+        if _user_has_feature(request.user, FeatureFlag.VIEW_ACTIONS):
+            return None
+        return _feature_denied_response(_current_plan(request.user), "Decision actions", "core")
+
     def get_queryset(self):
         qs = (
             DecisionLog.objects
@@ -295,6 +497,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         from apps.core.services.demand_deficit_service import analyze_product_deficits
         from apps.core.services.demand_deficit_service import analyze_product_deficits
         from apps.core.services.demand_deficit_service import analyze_product_deficits
@@ -312,6 +517,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         return response
 
     def retrieve(self, request, *args, **kwargs):
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         response = super().retrieve(request, *args, **kwargs)
         decision = self.get_object()
         if decision.status == DecisionLog.STATUS_SUGGESTED:
@@ -388,6 +596,18 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         Lightweight what-if comparison for one existing decision.
         Computed on demand and cached briefly. No writes.
         """
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         decision = self.get_object()
         if decision.product.owner != request.user:
             raise PermissionDenied()
@@ -458,6 +678,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
         Bulk acknowledge all active decisions for the current user.
         Useful for the "all clear" action in the dashboard.
         """
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         updated = DecisionLog.objects.filter(
             product__owner=request.user,
             is_acknowledged=False,
@@ -470,6 +693,9 @@ class DecisionViewSet(ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="top-priorities")
     def top_priorities(self, request):
+        denied = self._ensure_action_access(request)
+        if denied:
+            return denied
         from apps.core.usage import UsagePolicyService
         throttle = UsagePolicyService().enforce_refresh_window(request.user, "decisions-priorities")
         if throttle:
@@ -491,6 +717,8 @@ class PortfolioViewSet(ViewSet):
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request):
+        if not _user_has_feature(request.user, FeatureFlag.VIEW_PORTFOLIO_INSIGHTS):
+            return _feature_denied_response(_current_plan(request.user), "Portfolio insights", "pro")
         from apps.engine.portfolio import PortfolioService
 
         summary = PortfolioService().summary_for_user(request.user)
@@ -505,6 +733,20 @@ class PortfolioViewSet(ViewSet):
             },
             context={"request": request},
         )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class BusinessHealthViewSet(ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        if not _user_has_feature(request.user, FeatureFlag.VIEW_BUSINESS_HEALTH_REPORT):
+            return _feature_denied_response(_current_plan(request.user), "Business Health", "pro")
+        from apps.engine.business_health import BusinessHealthReportService
+
+        report = BusinessHealthReportService().report_for_user(request.user)
+        serializer = BusinessHealthReportSerializer(report, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -604,7 +846,14 @@ class ForecastViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class   = ForecastSnapshotSerializer
 
+    def _ensure_forecast_access(self, request):
+        if _user_has_feature(request.user, FeatureFlag.VIEW_FORECAST):
+            return None
+        return _feature_denied_response(_current_plan(request.user), "Forecasting", "pro")
+
     def get_queryset(self):
+        if not _user_has_feature(self.request.user, FeatureFlag.VIEW_FORECAST):
+            return ForecastSnapshot.objects.none()
         qs = ForecastSnapshot.objects.filter(
             product__owner=self.request.user
         ).select_related("product")
@@ -623,6 +872,9 @@ class ForecastViewSet(ReadOnlyModelViewSet):
         Returns the compact forecast strip for a specific product.
         Used by the ForecastStrip component. Defaults to 7-day horizon.
         """
+        denied = self._ensure_forecast_access(request)
+        if denied:
+            return denied
         from apps.core.usage import UsagePolicyService
         throttle = UsagePolicyService().enforce_refresh_window(request.user, "forecast-strip")
         if throttle:
@@ -670,6 +922,9 @@ class ForecastViewSet(ReadOnlyModelViewSet):
         Returns historical accuracy metrics for a product.
         Powered by the Feedback Engine's resolved snapshots.
         """
+        denied = self._ensure_forecast_access(request)
+        if denied:
+            return denied
         product_id = request.query_params.get("product")
         if not product_id:
             return Response(
@@ -770,47 +1025,33 @@ class DashboardViewSet(ViewSet):
     """
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=["get"], url_path="summary")
-    def summary(self, request):
-        """
-        GET /api/v1/dashboard/summary/
-
-        Returns the complete dashboard state.
-        """
+    def _build_summary_data(self, user):
         from apps.core.usage import UsagePolicyService
-
-        throttle = UsagePolicyService().enforce_refresh_window(request.user, "dashboard-summary")
-        if throttle:
-            return Response(throttle, status=status.HTTP_429_TOO_MANY_REQUESTS)
-
-        user     = request.user
         from apps.engine.industry import IndustryInsightService
         from apps.engine.priorities import get_top_priorities
+        from apps.inventory.models import BurnRate
+        can_view_actions = _user_has_feature(user, FeatureFlag.VIEW_ACTIONS)
+        can_view_revenue_gap = _user_has_feature(user, FeatureFlag.VIEW_REVENUE_GAP)
+        can_view_forecast = _user_has_feature(user, FeatureFlag.VIEW_FORECAST)
+        can_view_portfolio = _user_has_feature(user, FeatureFlag.VIEW_PORTFOLIO_INSIGHTS)
 
         products = Product.objects.filter(
             owner=user, is_active=True
         ).prefetch_related("burn_rates", "decisions")
 
-        total      = products.count()
-        avg_conf   = (
+        total = products.count()
+        avg_conf = (
             sum(p.confidence_score for p in products) / total
             if total > 0 else 0.0
         )
-        low_conf   = sum(1 for p in products if p.confidence_score < 0.4)
-        urgent     = [p for p in products if p.needs_verification]
-        now        = timezone.now()
+        low_conf = sum(1 for p in products if p.confidence_score < 0.4)
+        urgent = [p for p in products if p.needs_verification]
+        now = timezone.now()
         stale_cutoff = now - timedelta(days=2)
         stale_products = [
             p for p in products
             if not p.last_verified_at or p.last_verified_at < stale_cutoff
         ]
-
-        # Active decisions (PRO only)
-        active_decisions = []
-        top_priorities   = []
-        critical_count   = 0
-        stockouts_7d     = 0
-        revenue_at_risk_total = 0.0
 
         active_decisions = list(
             DecisionLog.objects
@@ -819,21 +1060,18 @@ class DashboardViewSet(ViewSet):
                 is_acknowledged=False,
                 expires_at__gt=now,
             )
-            .exclude(
-                status__in=[DecisionLog.STATUS_ACTED, DecisionLog.STATUS_IGNORED]
-            )
+            .exclude(status__in=[DecisionLog.STATUS_ACTED, DecisionLog.STATUS_IGNORED])
             .select_related("product")
             .order_by("-priority_score", "-created_at")[:20]
-        )
-        top_priorities = get_top_priorities(user.id, limit=3)
+        ) if can_view_actions else []
+        top_priorities = get_top_priorities(user.id, limit=3) if can_view_actions else []
         critical_count = sum(
-            1 for d in active_decisions
-            if d.action == DecisionLog.ALERT_CRITICAL
+            1 for d in active_decisions if d.action == DecisionLog.ALERT_CRITICAL
         )
         revenue_at_risk_total = round(
             sum(float(d.estimated_revenue_loss or 0.0) for d in active_decisions),
             2,
-        )
+        ) if can_view_revenue_gap else 0.0
         today = now.date()
         import datetime
         stockouts_7d = (
@@ -846,7 +1084,7 @@ class DashboardViewSet(ViewSet):
             .values("product")
             .distinct()
             .count()
-        )
+        ) if can_view_forecast else 0
 
         recent_decisions = DecisionLog.objects.filter(
             product__owner=user,
@@ -859,8 +1097,6 @@ class DashboardViewSet(ViewSet):
             status=DecisionLog.STATUS_IGNORED
         ).count()
 
-        # Latest learning timestamp
-        from apps.inventory.models import BurnRate
         latest_br = (
             BurnRate.objects
             .filter(product__owner=user)
@@ -879,8 +1115,20 @@ class DashboardViewSet(ViewSet):
         else:
             journey_hint = "Keep recording sales and stock counts to keep the advice sharp."
 
+        currency = _normalize_currency(getattr(user, "currency", "") or "USD")
+        if currency == "NGN":
+            currency_symbol = "₦"
+        elif currency == "USD":
+            currency_symbol = "$"
+        elif currency == "EUR":
+            currency_symbol = "€"
+        elif currency == "GBP":
+            currency_symbol = "£"
+        else:
+            currency_symbol = f"{currency} "
+
         if revenue_at_risk_total > 0:
-            managerial_headline = f"About N{int(round(revenue_at_risk_total)):,} is exposed in the current decision window."
+            managerial_headline = f"About {currency_symbol}{int(round(revenue_at_risk_total)):,} is exposed in the current decision window."
             managerial_subtext = "Focus on the highest-risk products first to protect sales before the next stockout window."
         elif critical_count > 0:
             managerial_headline = f"{critical_count} critical alert{'s' if critical_count != 1 else ''} need management attention."
@@ -896,14 +1144,14 @@ class DashboardViewSet(ViewSet):
             {
                 "key": "financial_exposure",
                 "title": "Revenue at risk",
-                "value": f"N{int(round(revenue_at_risk_total)):,}" if revenue_at_risk_total > 0 else "Stable",
+                "value": f"{currency_symbol}{int(round(revenue_at_risk_total)):,}" if revenue_at_risk_total > 0 else ("Unlock with Core" if not can_view_revenue_gap else "Stable"),
                 "summary": (
                     f"{critical_count} critical alert{'s' if critical_count != 1 else ''} are currently exposing near-term sales."
                     if revenue_at_risk_total > 0 else
-                    "No immediate revenue leak is visible from the current active decisions."
+                    ("Quantified revenue exposure becomes available on the Core decision layer." if not can_view_revenue_gap else "No immediate revenue leak is visible from the current active decisions.")
                 ),
                 "recommendation": "Review the critical summary and clear the highest-risk products first.",
-                "tone": "critical" if revenue_at_risk_total > 0 else "safe",
+                "tone": "critical" if revenue_at_risk_total > 0 else ("warning" if not can_view_revenue_gap else "safe"),
                 "target": "decisions",
             },
             {
@@ -913,10 +1161,10 @@ class DashboardViewSet(ViewSet):
                 "summary": (
                     f"{stockouts_7d} product{'s are' if stockouts_7d != 1 else ' is'} projected to hit a pessimistic stockout within a week."
                     if stockouts_7d > 0 else
-                    "No product is currently forecast to hit a pessimistic stockout within seven days."
+                    ("Forecast-driven stockout windows become available on Pro." if not can_view_forecast else "No product is currently forecast to hit a pessimistic stockout within seven days.")
                 ),
                 "recommendation": "Use the trend chart to confirm whether the pressure is demand-driven or a stock-count issue.",
-                "tone": "warning" if stockouts_7d > 0 else "safe",
+                "tone": "warning" if stockouts_7d > 0 else ("warning" if not can_view_forecast else "safe"),
                 "target": "stockouts",
             },
             {
@@ -963,35 +1211,38 @@ class DashboardViewSet(ViewSet):
             burn_rates__sample_event_count__lt=7,
         ).exists()
         operating_assumption = industry_service.get_operating_assumption(user)
-        if baseline_in_use:
+        if baseline_in_use and _normalize_country(getattr(user, "country", "") or "nigeria") == "nigeria":
             operating_assumption = f"Based on similar businesses in Nigeria. {operating_assumption}"
-        demand_deficits = analyze_product_deficits(user)
-        data = {
-            "total_products":          total,
+        demand_deficits = analyze_product_deficits(user) if can_view_revenue_gap else []
+
+        return {
+            "total_products": total,
             "products_needing_action": len(urgent),
             "products_low_confidence": low_conf,
-            "critical_alerts":         critical_count,
-            "avg_confidence":          round(avg_conf, 4),
-            "tier":                    user.tier,
-            "is_pro":                  user.is_pro,
-            "active_decisions":        active_decisions,
-            "top_priorities":          top_priorities,
-            "urgent_products":         urgent[:10],
-            "contextual_insights":     industry_service.get_insights(user, limit=3),
+            "critical_alerts": critical_count,
+            "avg_confidence": round(avg_conf, 4),
+            "tier": user.current_plan,
+            "is_pro": user.is_pro,
+            "active_decisions": active_decisions,
+            "top_priorities": top_priorities,
+            "urgent_products": urgent[:10],
+            "contextual_insights": industry_service.get_insights(user, limit=3),
             "user_context": {
                 "name": user.first_name or user.username,
                 "business_name": getattr(user, "business_name", "") or user.username,
                 "business_type": getattr(user, "business_type", "") or "General",
-                "tier": user.tier,
+                "country": getattr(user, "country", "") or "",
+                "currency": currency,
+                "tier": user.current_plan,
                 "is_pro": user.is_pro,
             },
-            "journey_hint":            journey_hint,
-            "last_learning_at":        latest_br,
-            "stockouts_within_7d":     stockouts_7d,
-            "revenue_at_risk_total":   revenue_at_risk_total,
-            "stale_products_count":    len(stale_products),
-            "actioned_decisions_14d":  actioned_decisions_14d,
-            "ignored_decisions_14d":   ignored_decisions_14d,
+            "journey_hint": journey_hint,
+            "last_learning_at": latest_br,
+            "stockouts_within_7d": stockouts_7d,
+            "revenue_at_risk_total": revenue_at_risk_total,
+            "stale_products_count": len(stale_products),
+            "actioned_decisions_14d": actioned_decisions_14d,
+            "ignored_decisions_14d": ignored_decisions_14d,
             "managerial_brief": {
                 "headline": managerial_headline,
                 "subtext": managerial_subtext,
@@ -1005,8 +1256,25 @@ class DashboardViewSet(ViewSet):
             },
             "operating_assumption": operating_assumption,
             "baseline_in_use": baseline_in_use,
-            "demand_deficits": demand_deficits,
+            "demand_deficits": demand_deficits if can_view_portfolio or can_view_revenue_gap else [],
         }
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        GET /api/v1/dashboard/summary/
+
+        Returns the complete dashboard state.
+        """
+        from apps.core.usage import UsagePolicyService
+
+        throttle = UsagePolicyService().enforce_refresh_window(request.user, "dashboard-summary")
+        if throttle:
+            return Response(throttle, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        user     = request.user
+        _maybe_send_automated_product_update_reminder(user)
+        data = self._build_summary_data(user)
 
         serializer = DashboardSummarySerializer(data, context={"request": request})
         return Response(serializer.data)
@@ -1076,6 +1344,7 @@ def notifications(request):
     Returns unread in-app notifications for the current user.
     """
     from apps.notifications.models import Notification
+    _maybe_send_automated_product_update_reminder(request.user)
     unread = Notification.objects.filter(
         user=request.user, is_read=False
     ).select_related("decision__product")[:50]
@@ -1097,6 +1366,18 @@ def notifications(request):
     return Response(data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def notification_status(request):
+    """
+    GET /api/v1/notifications/status/
+    Returns whether each delivery channel is actually ready for this user.
+    """
+    from apps.notifications.dispatch import notification_channel_status
+
+    return Response(notification_channel_status(request.user))
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def mark_notifications_read(request):
@@ -1109,6 +1390,60 @@ def mark_notifications_read(request):
         user=request.user, is_read=False
     ).update(is_read=True, read_at=timezone.now())
     return Response({"marked_read": updated})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_test_email(request):
+    """
+    POST /api/v1/notifications/test-email/
+    Send a test email to the signed-in user so delivery can be verified live.
+    """
+    ready, detail = _email_delivery_ready()
+    if not ready:
+        return Response(
+            {"ready": False, "sent": False, "detail": detail},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    if not getattr(request.user, "email", ""):
+        return Response(
+            {"ready": True, "sent": False, "detail": "Your account does not have an email address yet."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    sent = False
+    try:
+        sent = _send_account_email(
+            request.user,
+            subject="SiloXR test email",
+            text_body=(
+                f"Hi {request.user.username},\n\n"
+                "This is a test email from SiloXR.\n\n"
+                "If you received this message, email delivery is working for your account."
+            ),
+            html_body=(
+                f"<p>Hi {request.user.username},</p>"
+                "<p>This is a test email from <strong>SiloXR</strong>.</p>"
+                "<p>If you received this message, email delivery is working for your account.</p>"
+            ),
+            log_context="Test email",
+        )
+    except Exception as exc:
+        logger.error("Test email failed for %s: %s", request.user.email, exc, exc_info=True)
+        return Response(
+            {"ready": True, "sent": False, "detail": "The email provider rejected the test send."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    return Response(
+        {
+            "ready": True,
+            "sent": sent,
+            "detail": "Test email sent successfully." if sent else "Test email could not be sent.",
+            "recipient": request.user.email,
+        }
+    )
 
 # backend/apps/api/views.py  — add to bottom
 
@@ -1131,6 +1466,11 @@ def register(request):
     business_type = request.data.get("business_type", "").strip().lower()
     business_name = request.data.get("business_name", "").strip()
     phone_number = request.data.get("phone_number", "").strip()
+    country = _normalize_country(request.data.get("country", ""))
+    currency = _currency_for_country(country)
+    email_notifications_enabled = bool(request.data.get("email_notifications_enabled", True))
+    telegram_requested = bool(request.data.get("telegram_enabled", False))
+    preferred_channel = (request.data.get("preferred_channel", User.CHANNEL_EMAIL) or User.CHANNEL_EMAIL).strip().lower()
     terms_accepted = bool(request.data.get("terms_accepted", False))
     terms_version = request.data.get("terms_version", "placeholder-v1").strip() or "placeholder-v1"
 
@@ -1149,6 +1489,8 @@ def register(request):
             {"terms_accepted": ["You must accept the terms and conditions to continue."]},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if preferred_channel not in {User.CHANNEL_EMAIL, User.CHANNEL_TELEGRAM}:
+        preferred_channel = User.CHANNEL_EMAIL
 
     if User.objects.filter(username=username).exists():
         return Response(
@@ -1177,16 +1519,61 @@ def register(request):
         business_type=business_type,
         business_name=business_name,
         phone_number=phone_number or None,
+        country=country,
+        currency=currency,
+        email_notifications_enabled=email_notifications_enabled,
+        telegram_enabled=False,
+        preferred_channel=preferred_channel,
         terms_accepted_at=timezone.now(),
         terms_version=terms_version,
     )
+
+    try:
+        from apps.billing.enums import PlanType
+        from apps.billing.models import Business, Subscription
+
+        business = Business.objects.create(
+            owner=user,
+            name=business_name or username,
+            country=country,
+            currency=currency,
+        )
+        Subscription.objects.create(
+            business=business,
+            plan=PlanType.FREE,
+            active=True,
+        )
+    except Exception as exc:
+        logger.error("Business profile provisioning failed for %s: %s", user.username, exc, exc_info=True)
+
+    telegram_link = ""
+    telegram_bot_user = ""
+    if telegram_requested or preferred_channel == User.CHANNEL_TELEGRAM:
+        try:
+            token = _generate_telegram_link_token(user)
+            telegram_bot_user = _get_telegram_bot_username() or "siloxr_bot"
+            telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
+        except Exception as exc:
+            logger.error("Telegram signup link generation failed for %s: %s", user.username, exc, exc_info=True)
+
+    welcome_email_sent = False
+    try:
+        welcome_email_sent = _send_welcome_email(user, preferred_channel=preferred_channel)
+    except Exception as exc:
+        logger.error("Welcome email failed for %s: %s", user.email, exc, exc_info=True)
 
     return Response(
         {
             "id": str(user.id),
             "username": user.username,
-            "tier": user.tier,
+            "tier": user.current_plan,
             "business_type": user.business_type,
+            "country": user.country,
+            "currency": user.currency,
+            "preferred_channel": user.preferred_channel,
+            "telegram_link": telegram_link,
+            "telegram_bot_user": telegram_bot_user,
+            "welcome_email_sent": welcome_email_sent,
         },
         status=status.HTTP_201_CREATED,
     )
@@ -1206,6 +1593,7 @@ def login(request):
 
     identifier = request.data.get("identifier", "").strip()
     password = request.data.get("password", "")
+    suppress_login_email = bool(request.data.get("suppress_login_email", False))
 
     if not identifier or not password:
         return Response(
@@ -1226,7 +1614,21 @@ def login(request):
         )
 
     refresh = RefreshToken.for_user(user)
-    return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+    login_email_sent = False
+    if not suppress_login_email:
+        try:
+            login_email_sent = _send_login_email(user)
+        except Exception as exc:
+            logger.error("Login email failed for %s: %s", user.email, exc, exc_info=True)
+
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "login_email_sent": login_email_sent,
+            "login_email_suppressed": suppress_login_email,
+        }
+    )
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1236,20 +1638,23 @@ def me(request):
     Returns current user info including tier and notification settings.
     """
     user = request.user
+    _maybe_send_automated_product_update_reminder(user)
     return Response({
         "id":                           str(user.id),
         "username":                     user.username,
         "email":                        user.email,
-        "tier":                         user.tier,
+        "tier":                         user.current_plan,
         "is_pro":                       user.is_pro,
         "business_name":                user.business_name,
         "business_type":                user.business_type,
+        "country":                      user.country,
+        "currency":                     user.currency,
         "avatar_url":                   user.avatar_url,
         "phone_number":                 user.phone_number,
-        "whatsapp_enabled":             user.whatsapp_enabled,
+        "whatsapp_enabled":             False,
         "telegram_enabled":             user.telegram_enabled,
-        "preferred_channel":            user.preferred_channel,
-        "whatsapp_critical_only":       user.whatsapp_critical_only,
+        "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel == "whatsapp" else user.preferred_channel,
+        "whatsapp_critical_only":       False,
         "email_notifications_enabled":  user.email_notifications_enabled,
     })
 
@@ -1267,6 +1672,11 @@ def upload_data(request):
     file = request.FILES.get("file")
     if not file:
         return Response({"detail": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+    if not request.user.is_pro and int(getattr(file, "size", 0) or 0) > FREE_UPLOAD_LIMIT_BYTES:
+        return Response(
+            {"detail": "Free plan uploads are limited to 1MB. Upgrade to Pro for unlimited upload size."},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
 
     ext          = file.name.rsplit(".", 1)[-1].lower()
     content      = file.read()
@@ -1470,6 +1880,8 @@ def get_insights(request):
     engine   = InsightEngine()
     insights = engine.run_for_user(request.user)
     gate     = IntelligenceGate()
+    can_view_revenue_gap = _user_has_feature(request.user, FeatureFlag.VIEW_REVENUE_GAP)
+    can_view_actions = _user_has_feature(request.user, FeatureFlag.VIEW_ACTIONS)
 
     data = []
     for i in insights:
@@ -1486,9 +1898,9 @@ def get_insights(request):
             "product_sku":    i.product_sku,
             "product_name":   i.product_name,
             "observation":    i.observation,
-            "prediction":     prediction,
-            "recommendation": i.recommendation,
-            "impact":         impact,
+            "prediction":     prediction if can_view_actions else "Monitor this product closely.",
+            "recommendation": i.recommendation if can_view_actions else "Record more stock and sales activity to unlock a recommended action.",
+            "impact":         impact if can_view_revenue_gap else "",
             "context":        gate.abstract_reasoning(i.context, depth),
             "reasoning":      gate.abstract_reasoning(i.reasoning, depth),
             "confidence":     i.confidence,
@@ -1496,8 +1908,8 @@ def get_insights(request):
             "severity":       i.severity,
             "action_type":    i.action_type,
             "urgency_tier":   i.urgency_tier,
-            "lost_sales_est": i.lost_sales_est,
-            "is_pro_detail":  request.user.is_pro,
+            "lost_sales_est": i.lost_sales_est if can_view_revenue_gap else 0,
+            "is_pro_detail":  _user_has_feature(request.user, FeatureFlag.VIEW_FORECAST),
         })
 
     return Response(data)
@@ -1523,9 +1935,11 @@ def get_dominant_insight(request):
     from apps.engine.insights import InsightEngine
     from apps.engine.gating import IntelligenceGate
 
-    is_pro = request.user.is_pro
+    can_view_actions = _user_has_feature(request.user, FeatureFlag.VIEW_ACTIONS)
+    can_view_revenue_gap = _user_has_feature(request.user, FeatureFlag.VIEW_REVENUE_GAP)
+    can_view_forecast = _user_has_feature(request.user, FeatureFlag.VIEW_FORECAST)
 
-    if is_pro:
+    if can_view_actions:
         decisions = get_top_priorities(request.user.id, limit=1)
         if decisions:
             d   = decisions[0]
@@ -1533,7 +1947,7 @@ def get_dominant_insight(request):
             imp = {}
             lost = getattr(d, "estimated_lost_sales", 0) or 0
             rev  = getattr(d, "estimated_revenue_loss", 0) or 0
-            if lost > 0:
+            if lost > 0 and can_view_revenue_gap:
                 imp = {
                     "visible":          True,
                     "lost_sales_units": round(lost, 1),
@@ -1547,15 +1961,15 @@ def get_dominant_insight(request):
                     "product_sku":    p.sku,
                     "product_name":   p.name,
                     "observation":    d.reasoning.split(".")[0] + ".",
-                    "prediction":     _days_to_prediction(d),
+                    "prediction":     _days_to_prediction(d) if can_view_forecast else "Attention is needed soon.",
                     "recommendation": _action_to_recommendation(d),
-                    "impact":         _impact_to_sentence(imp),
+                    "impact":         _impact_to_sentence(imp) if can_view_revenue_gap else "",
                     "confidence":     d.confidence_score,
                     "date_signal":    _days_to_date_signal(d),
                     "severity":       d.severity,
                     "urgency_tier":   d.severity,
                     "impact_detail":  imp,
-                    "is_pro_detail":  True,
+                    "is_pro_detail":  can_view_forecast,
                     "priority_score": d.priority_score,
                 }
             })
@@ -1706,33 +2120,53 @@ def profile(request):
     """
     user = request.user
     if request.method == "GET":
+        _maybe_send_automated_product_update_reminder(user)
         telegram_profile = getattr(user, "telegram_profile", None)
         telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
+        telegram_link = ""
+        telegram_bot_user = ""
+        telegram_link_error = ""
+        if not telegram_linked:
+            try:
+                telegram_bot_user = _get_telegram_bot_username()
+                if telegram_bot_user:
+                    token = _generate_telegram_link_token(user)
+                    telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
+                else:
+                    telegram_link_error = "Telegram linking is not configured yet."
+            except Exception as exc:
+                logger.warning("Telegram link prebuild failed for %s: %s", user.username, exc, exc_info=True)
+                telegram_link_error = "Could not generate Telegram link right now."
         return Response({
             "id":                           str(user.id),
             "username":                     user.username,
             "email":                        user.email,
             "business_name":                user.business_name,
             "business_type":                user.business_type,
+            "country":                      user.country,
+            "currency":                     user.currency,
             "phone_number":                 user.phone_number,
-            "whatsapp_enabled":             user.whatsapp_enabled,
+            "whatsapp_enabled":             False,
             "telegram_enabled":             user.telegram_enabled,
             "telegram_linked":              telegram_linked,
-            "preferred_channel":            user.preferred_channel,
-            "whatsapp_critical_only":       user.whatsapp_critical_only,
+            "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel == "whatsapp" else user.preferred_channel,
+            "whatsapp_critical_only":       False,
             "email_notifications_enabled":  user.email_notifications_enabled,
             "avatar_url":                   user.avatar_url,
-            "tier":                         user.tier,
+            "tier":                         user.current_plan,
             "is_pro":                       user.is_pro,
             "date_joined":                  user.date_joined,
             "telegram_download_url":        "https://telegram.org/dl",
+            "telegram_bot_user":            telegram_bot_user,
+            "telegram_link":                telegram_link,
+            "telegram_link_error":          telegram_link_error,
         })
 
     # PATCH — update allowed fields
     allowed = [
         "business_name", "business_type", "phone_number",
-        "whatsapp_enabled", "email_notifications_enabled", "avatar_url",
-        "telegram_enabled", "preferred_channel", "whatsapp_critical_only",
+        "email_notifications_enabled", "avatar_url",
+        "telegram_enabled", "preferred_channel", "country", "currency",
     ]
     telegram_profile = getattr(user, "telegram_profile", None)
     telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
@@ -1754,8 +2188,24 @@ def profile(request):
         )
     for field in allowed:
         if field in request.data:
-            setattr(user, field, request.data[field])
+            value = request.data[field]
+            if field == "preferred_channel" and value == "whatsapp":
+                value = user.CHANNEL_EMAIL
+            if field == "country":
+                value = _normalize_country(value)
+            if field == "currency":
+                continue
+            setattr(user, field, value)
+            if field == "country":
+                user.currency = _currency_for_country(value)
     user.save()
+
+    business = getattr(user, "business_profile", None)
+    if business is not None:
+        business.name = user.business_name or business.name
+        business.country = user.country or business.country
+        business.currency = user.currency or business.currency
+        business.save()
     return Response({"status": "updated"})
 
 
@@ -1875,35 +2325,10 @@ def send_phone_otp(request):
     POST /api/v1/profile/phone/send-otp/
     Sends an OTP to the user's phone number for WhatsApp verification.
     """
-    from apps.core.models import OTPVerification
-    user = request.user
-    phone = request.data.get("phone_number", user.phone_number).strip()
-    if not phone:
-        return Response({"detail": "Phone number required."}, status=400)
-
-    # Temporarily store the phone being verified
-    user.phone_number = phone
-    user.save(update_fields=["phone_number"])
-
-    otp = OTPVerification.generate(user, OTPVerification.PURPOSE_PHONE)
-
-    # Send via Twilio if available
-    try:
-        from apps.billing.stripe_client import get_stripe   # reuse Twilio pattern
-        from django.conf import settings as djsettings
-        from twilio.rest import Client
-        client = Client(djsettings.TWILIO_ACCOUNT_SID, djsettings.TWILIO_AUTH_TOKEN)
-        client.messages.create(
-            body = f"Your SiloXR verification code: {otp.code}",
-            from_= djsettings.TWILIO_WHATSAPP_FROM,
-            to   = f"whatsapp:{phone}",
-        )
-    except Exception:
-        # Fall back to logging in dev
-        import logging
-        logging.getLogger(__name__).info("OTP for %s: %s", phone, otp.code)
-
-    return Response({"status": "otp_sent"})
+    return Response(
+        {"detail": "WhatsApp setup is temporarily disabled."},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 @api_view(["POST"])
@@ -1913,20 +2338,10 @@ def verify_phone_otp(request):
     POST /api/v1/profile/phone/verify/
     { code: "123456" }
     """
-    from apps.core.models import OTPVerification
-    user = request.user
-    code = request.data.get("code", "").strip()
-
-    otp = OTPVerification.objects.filter(
-        user=user, purpose=OTPVerification.PURPOSE_PHONE, is_used=False
-    ).order_by("-created_at").first()
-
-    if not otp or not otp.verify(code):
-        return Response({"detail": "Invalid or expired code."}, status=400)
-
-    user.whatsapp_enabled = True
-    user.save(update_fields=["whatsapp_enabled"])
-    return Response({"status": "verified", "whatsapp_enabled": True})
+    return Response(
+        {"detail": "WhatsApp setup is temporarily disabled."},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 # backend/apps/api/views.py — ADD
 
@@ -1959,12 +2374,23 @@ def telegram_link_token(request):
     Generates a token the user sends to the bot to link their account.
     Returns the bot username and the deep link URL.
     """
-    from apps.notifications.telegram import generate_link_token
-    from django.conf import settings as djsettings
+    bot_user = _get_telegram_bot_username()
+    if not bot_user:
+        return Response(
+            {"detail": "Telegram linking is not configured yet."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
-    token    = generate_link_token(request.user)
-    bot_user = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "siloxr_bot")
-    link     = f"https://t.me/{bot_user}?start={token}"
+    try:
+        token = _generate_telegram_link_token(request.user)
+    except Exception as exc:
+        logger.error("Telegram link generation failed for %s: %s", request.user.username, exc, exc_info=True)
+        return Response(
+            {"detail": "Telegram linking is temporarily unavailable. Please try again shortly."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    link = f"https://t.me/{bot_user}?start={token}"
 
     return Response({
         "token":    token,

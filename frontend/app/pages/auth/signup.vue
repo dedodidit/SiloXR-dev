@@ -2,24 +2,29 @@
 definePageMeta({ auth: false })
 
 import { SITE_CONTACT_EMAIL, SITE_CONTACT_MAILTO } from "../../constants/site"
+import { countryOptions } from "../../constants/markets"
 
 const config = useRuntimeConfig()
 const router = useRouter()
+const currentUser = useState<any | null>("current-user", () => null)
 
 const form = reactive({
-  username: "",
   email: "",
   password: "",
-  confirmPassword: "",
   business_name: "",
-  business_type: "",
-  phone_number: "",
-  terms_accepted: false,
+  country: "",
 })
 
 const loading = ref(false)
 const error = ref("")
+const showPassword = ref(false)
 const fieldErrors = reactive<Record<string, string>>({})
+
+const reassurancePoints = [
+  "Free to start",
+  "No credit card required",
+  "Takes less than 30 seconds",
+]
 
 const termsVersion = "placeholder-v1"
 
@@ -28,32 +33,34 @@ const clearErrors = () => {
   for (const key of Object.keys(fieldErrors)) delete fieldErrors[key]
 }
 
+const buildUsername = (email: string) => {
+  const local = String(email || "").split("@")[0] || "siloxr"
+  const normalized = local.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "siloxr"
+  const suffix = Date.now().toString(36).slice(-6)
+  return `${normalized}-${suffix}`
+}
+
 const signUp = async () => {
   clearErrors()
-
-  if (form.password !== form.confirmPassword) {
-    fieldErrors.confirmPassword = "Passwords do not match."
-    return
-  }
-
-  if (!form.terms_accepted) {
-    fieldErrors.terms_accepted = "You must accept the terms and conditions to continue."
-    return
-  }
-
   loading.value = true
 
   try {
-    await $fetch(`${config.public.apiBase}/auth/register/`, {
+    const username = buildUsername(form.email)
+
+    const registration = await $fetch<{ welcome_email_sent?: boolean }>(`${config.public.apiBase}/auth/register/`, {
       method: "POST",
       body: {
-        username: form.username,
+        username,
         email: form.email,
         password: form.password,
         business_name: form.business_name,
-        business_type: form.business_type,
-        phone_number: form.phone_number,
-        terms_accepted: form.terms_accepted,
+        business_type: "",
+        phone_number: "",
+        country: form.country,
+        email_notifications_enabled: true,
+        telegram_enabled: false,
+        preferred_channel: "email",
+        terms_accepted: true,
         terms_version: termsVersion,
       },
     })
@@ -62,150 +69,118 @@ const signUp = async () => {
       `${config.public.apiBase}/auth/login/`,
       {
         method: "POST",
-        body: { identifier: form.username || form.email, password: form.password },
+        body: { identifier: form.email, password: form.password, suppress_login_email: true },
       }
     )
 
     useCookie("siloxr_token", { maxAge: 60 * 60 * 8 }).value = tokens.access
     useCookie("siloxr_refresh", { maxAge: 60 * 60 * 24 * 30 }).value = tokens.refresh
-    await router.push("/dashboard")
+
+    try {
+      currentUser.value = await $fetch(`${config.public.apiBase}/auth/me/`, {
+        headers: { Authorization: `Bearer ${tokens.access}` },
+      })
+    } catch {
+      currentUser.value = {
+        email: form.email,
+        business_name: form.business_name,
+      }
+    }
+
+    if (process.client) {
+      sessionStorage.setItem("siloxr-signup-welcome-email", registration?.welcome_email_sent ? "sent" : "pending")
+    }
+
+    await router.push("/onboarding?welcome=1")
   } catch (e: any) {
     const data = e?.data ?? {}
-    const firstDetail = data.detail
-      || data.username?.[0]
-      || data.email?.[0]
-      || data.password?.[0]
-      || data.terms_accepted?.[0]
-      || "We couldn't complete your signup."
+    const firstDetail = data.detail || data.email?.[0] || data.password?.[0] || data.country?.[0] || "We couldn't create your account."
 
     error.value = firstDetail
-
-    if (Array.isArray(data.username)) fieldErrors.username = data.username[0]
     if (Array.isArray(data.email)) fieldErrors.email = data.email[0]
     if (Array.isArray(data.password)) fieldErrors.password = data.password[0]
-    if (Array.isArray(data.terms_accepted)) fieldErrors.terms_accepted = data.terms_accepted[0]
+    if (Array.isArray(data.country)) fieldErrors.country = data.country[0]
   } finally {
     loading.value = false
   }
 }
 
-useHead({ title: "Create account - SiloXR" })
+useHead({ title: "Create free account - SiloXR" })
 </script>
 
 <template>
   <AuthShell
     eyebrow="Start free"
-    title="Create your SiloXR account"
-    subtitle="Start with industry baselines, then let SiloXR personalize around your real business activity."
-    panel-title="Decision system setup"
-    panel-copy="Set up your account once, then move from uncertainty to clearer stock, demand, and revenue decisions."
+    title="Create your free SiloXR account"
+    subtitle="Get into the product quickly, then let SiloXR guide your first setup in a few short steps."
+    panel-title="Inventory decisions, faster"
+    panel-copy="Create your account in seconds, add one product, and see your first operating insight immediately."
   >
-    <form class="auth-form" @submit.prevent="signUp">
-      <div class="auth-grid">
-        <div class="field">
-          <label class="field__label">Username</label>
-          <input
-            v-model="form.username"
-            class="field__input"
-            type="text"
-            autocomplete="username"
-            placeholder="your username"
-            required
-          />
-          <span v-if="fieldErrors.username" class="field__error">{{ fieldErrors.username }}</span>
-        </div>
-
-        <div class="field">
-          <label class="field__label">Business name</label>
-          <input
-            v-model="form.business_name"
-            class="field__input"
-            type="text"
-            placeholder="Your business name"
-          />
-        </div>
-      </div>
-
-      <div class="auth-grid">
-        <div class="field">
-          <label class="field__label">Email</label>
-          <input
-            v-model="form.email"
-            class="field__input"
-            type="email"
-            autocomplete="email"
-            placeholder="you@company.com"
-            required
-          />
-          <span v-if="fieldErrors.email" class="field__error">{{ fieldErrors.email }}</span>
-        </div>
-
-        <div class="field">
-          <label class="field__label">Phone number</label>
-          <input
-            v-model="form.phone_number"
-            class="field__input"
-            type="tel"
-            autocomplete="tel"
-            placeholder="+2348012345678"
-          />
-        </div>
+    <form class="signup-flow" @submit.prevent="signUp">
+      <div class="signup-proof">
+        <span v-for="point in reassurancePoints" :key="point" class="signup-proof__pill">{{ point }}</span>
       </div>
 
       <div class="field">
-        <label class="field__label">Business type</label>
-        <select v-model="form.business_type" class="field__input">
-          <option value="">Select business type</option>
-          <option value="retail">Retail</option>
-          <option value="wholesale">Wholesale / distribution</option>
-          <option value="pharmacy">Pharmacy</option>
-          <option value="food">Food & beverage</option>
-          <option value="hardware">Hardware & building</option>
-          <option value="supermarket">Supermarket</option>
-          <option value="other">Other</option>
-        </select>
+        <label class="field__label">Email</label>
+        <input
+          v-model="form.email"
+          class="field__input"
+          type="email"
+          autocomplete="email"
+          placeholder="you@company.com"
+          required
+        />
+        <span v-if="fieldErrors.email" class="field__error">{{ fieldErrors.email }}</span>
       </div>
 
-      <div class="auth-grid">
-        <div class="field">
-          <label class="field__label">Password</label>
+      <div class="field">
+        <label class="field__label">Password</label>
+        <div class="field__input-wrap">
           <input
             v-model="form.password"
             class="field__input"
-            type="password"
+            :type="showPassword ? 'text' : 'password'"
             autocomplete="new-password"
             placeholder="Create a secure password"
             required
           />
-          <span v-if="fieldErrors.password" class="field__error">{{ fieldErrors.password }}</span>
+          <button type="button" class="field__toggle" @click="showPassword = !showPassword">
+            {{ showPassword ? "Hide" : "Show" }}
+          </button>
         </div>
-
-        <div class="field">
-          <label class="field__label">Confirm password</label>
-          <input
-            v-model="form.confirmPassword"
-            class="field__input"
-            type="password"
-            autocomplete="new-password"
-            placeholder="Repeat your password"
-            required
-          />
-          <span v-if="fieldErrors.confirmPassword" class="field__error">{{ fieldErrors.confirmPassword }}</span>
-        </div>
+        <span v-if="fieldErrors.password" class="field__error">{{ fieldErrors.password }}</span>
       </div>
 
-      <div class="terms-box">
-        <p class="terms-box__title">Terms and conditions</p>
-        <p class="terms-box__copy">
-          <NuxtLink to="/legal/terms" class="terms-box__link">Placeholder legal framework</NuxtLink>.
-          This will be replaced with the final SiloXR terms, privacy, notification,
-          and billing conditions before launch.
-        </p>
-        <label class="terms-check">
-          <input v-model="form.terms_accepted" type="checkbox" />
-          <span>I accept the SiloXR terms and conditions.</span>
-        </label>
-        <span v-if="fieldErrors.terms_accepted" class="field__error">{{ fieldErrors.terms_accepted }}</span>
+      <div class="field">
+        <label class="field__label">Business name <span class="field__optional">(optional)</span></label>
+        <input
+          v-model="form.business_name"
+          class="field__input"
+          type="text"
+          placeholder="Your business name"
+        />
+      </div>
+
+      <div class="field">
+        <label class="field__label">Country</label>
+        <select v-model="form.country" class="field__input" required>
+          <option
+            v-for="option in countryOptions"
+            :key="option.value || 'blank-country'"
+            :value="option.value"
+            :disabled="option.value === ''"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+        <span class="field__hint">We use this to set your currency and local operating defaults.</span>
+        <span v-if="fieldErrors.country" class="field__error">{{ fieldErrors.country }}</span>
+      </div>
+
+      <div class="signup-note">
+        <p class="signup-note__title">What happens next</p>
+        <p class="signup-note__copy">You’ll answer 3 quick onboarding steps, add one product, and get an immediate first insight.</p>
       </div>
 
       <p v-if="error" class="auth-error">{{ error }}</p>
@@ -213,6 +188,10 @@ useHead({ title: "Create account - SiloXR" })
       <button type="submit" class="auth-btn" :disabled="loading">
         {{ loading ? "Creating account..." : "Create free account" }}
       </button>
+
+      <p class="signup-legal">
+        By continuing, you agree to the SiloXR terms. We keep setup intentionally light so you can get to value faster.
+      </p>
     </form>
 
     <div class="auth-links">
@@ -228,15 +207,24 @@ useHead({ title: "Create account - SiloXR" })
 </template>
 
 <style scoped>
-.auth-form {
+.signup-flow {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.auth-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.signup-proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.signup-proof__pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #185FA5 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #185FA5 16%, var(--border-subtle));
+  color: #185FA5;
+  font-size: 12px;
+  font-weight: 700;
 }
 .field {
   display: flex;
@@ -245,118 +233,121 @@ useHead({ title: "Create account - SiloXR" })
 }
 .field__label {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-2);
+}
+.field__optional {
+  color: var(--text-3);
+  font-weight: 600;
+}
+.field__hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.field__input-wrap {
+  position: relative;
 }
 .field__input {
   width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg-raised);
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
   color: var(--text);
-  transition: border-color .15s ease, box-shadow .15s ease, background .2s ease;
+  font-size: 15px;
+  transition: border-color .18s ease, box-shadow .18s ease;
 }
-.field__input::placeholder {
-  color: var(--text-4);
+.field__input-wrap .field__input {
+  padding-right: 72px;
 }
 .field__input:focus {
   outline: none;
-  border-color: var(--purple);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--purple) 18%, transparent);
+  border-color: color-mix(in srgb, #185FA5 46%, var(--border-subtle));
+  box-shadow: 0 0 0 4px color-mix(in srgb, #185FA5 12%, transparent);
 }
-.field__error {
+.field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #185FA5;
   font-size: 12px;
-  color: var(--red);
+  font-weight: 800;
+  cursor: pointer;
 }
-.terms-box {
+.field__error,
+.auth-error {
+  font-size: 12px;
+  color: var(--danger, #A32D2D);
+}
+.signup-note {
+  display: grid;
+  gap: 4px;
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid var(--border);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--purple-bg) 72%, transparent), transparent 100%),
-    var(--bg-raised);
+    radial-gradient(circle at top right, color-mix(in srgb, #4AA3FF 12%, transparent), transparent 40%),
+    linear-gradient(145deg, color-mix(in srgb, #185FA5 10%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 95%, transparent));
+  border: 1px solid color-mix(in srgb, #185FA5 14%, var(--border-subtle));
 }
-.terms-box__title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
+.signup-note__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #185FA5;
 }
-.terms-box__copy {
-  margin-top: 8px;
+.signup-note__copy,
+.signup-legal {
+  margin: 0;
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-2);
 }
-.terms-box__link {
-  color: var(--purple);
-  font-weight: 700;
-  text-decoration: none;
-}
-.terms-box__link:hover {
-  text-decoration: underline;
-}
-.terms-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 14px;
-  font-size: 13px;
-  color: var(--text-2);
-  cursor: pointer;
-}
-.terms-check input {
-  margin-top: 2px;
-}
-.auth-error {
-  font-size: 13px;
-  color: var(--red);
-  padding: 10px 12px;
-  background: var(--red-bg);
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--red) 20%, transparent);
-}
 .auth-btn {
-  padding: 13px 14px;
-  background: linear-gradient(135deg, var(--purple), var(--purple-2));
-  color: #fff;
+  min-height: 52px;
   border: none;
-  border-radius: 14px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #185FA5, #4AA3FF);
+  color: #fff;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
-  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--purple) 28%, transparent);
-}
-.auth-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
+  box-shadow: 0 18px 32px color-mix(in srgb, #185FA5 18%, transparent);
 }
 .auth-btn:disabled {
-  opacity: .6;
-  cursor: not-allowed;
+  opacity: .7;
+  cursor: wait;
 }
 .auth-links {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 8px;
-  align-items: center;
+  margin-top: 18px;
 }
 .auth-switch,
 .auth-contact {
+  margin: 0;
   font-size: 13px;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 .auth-link {
-  color: var(--purple);
-  font-weight: 600;
+  color: #185FA5;
+  font-weight: 700;
   text-decoration: none;
 }
 .auth-link:hover {
   text-decoration: underline;
 }
-@media (max-width: 720px) {
-  .auth-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 640px) {
+  .signup-flow {
+    gap: 14px;
+  }
+  .field__input {
+    min-height: 50px;
   }
 }
 </style>

@@ -26,11 +26,15 @@ class DemandDeficitService:
     MAX_RESULTS = 3
 
     def analyze_product_deficits(self, user) -> list[dict[str, Any]]:
+        country = clean_source_text(getattr(user, "country", "") or "").lower() or "nigeria"
+        if country != "nigeria":
+            return []
+
         industry = normalize_industry(getattr(user, "business_type", "") or "retail")
         try:
             baselines = list(
                 NigeriaBaselineProduct.objects.filter(
-                    country="nigeria",
+                    country=country,
                     industry=industry,
                 ).order_by("-avg_weekly_turnover")
             )

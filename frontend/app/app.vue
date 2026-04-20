@@ -11,6 +11,7 @@ const router = useRouter()
 const route  = useRoute()
 const token  = useCookie("siloxr_token")
 const { $api } = useNuxtApp()
+const runtimeConfig = useRuntimeConfig()
 
 const isAuthPage    = computed(() => route.path.startsWith("/auth/"))
 const isOnboardPage = computed(() => route.path === "/onboarding")
@@ -18,7 +19,13 @@ const isDashboard   = computed(() => route.path === "/dashboard")
 const isWorkspace   = computed(() => route.path.startsWith("/workspace/"))
 const showSidebar   = computed(() => isWorkspace.value && showHeader.value)
 const isPublicMarketing = computed(() => route.path === "/" || route.path.startsWith("/landing"))
-const showHeader    = computed(() => !isAuthPage.value && !isPublicMarketing.value && !!token.value)
+const showHeader    = computed(() => !isAuthPage.value && !isPublicMarketing.value && !isOnboardPage.value && !!token.value)
+const siteUrl = computed(() => String(runtimeConfig.public.siteUrl || "https://siloxr.com").replace(/\/+$/, ""))
+const canonicalUrl = computed(() => {
+  const path = route.path === "/" ? "/" : route.path.replace(/\/+$/, "") || "/"
+  return `${siteUrl.value}${path}`
+})
+const isIndexableRoute = computed(() => route.path === "/")
 
 const user = ref<any>(null)
 const currentUser = useState<any | null>("current-user", () => null)
@@ -60,19 +67,43 @@ onMounted(async () => {
   }
 })
 
+watch(currentUser, (nextUser) => {
+  if (nextUser) user.value = nextUser
+})
+
 const openAccountSettings = () => {
   router.push("/profile")
 }
 
-const userInitial = computed(() =>
-  (user.value?.username?.[0] ?? "?").toUpperCase()
-)
+const headerUser = computed(() => currentUser.value || user.value || null)
+
 const displayUserName = computed(() => {
-  const raw = String(user.value?.username ?? "").trim()
-  if (!raw) return "..."
+  const raw = String(
+    headerUser.value?.business_name
+      || headerUser.value?.first_name
+      || headerUser.value?.username
+      || headerUser.value?.email?.split?.("@")?.[0]
+      || ""
+  ).trim()
+  if (!raw) return "Account"
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 })
-const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
+const userInitial = computed(() =>
+  displayUserName.value.trim().charAt(0).toUpperCase() || "S"
+)
+const isFreeUser = computed(() => Boolean(headerUser.value) && !headerUser.value?.is_pro)
+
+useHead(() => ({
+  link: [
+    { rel: "canonical", href: canonicalUrl.value },
+  ],
+  meta: [
+    {
+      name: "robots",
+      content: isIndexableRoute.value ? "index, follow, max-image-preview:large" : "noindex, nofollow",
+    },
+  ],
+}))
 </script>
 
 <template>
@@ -100,10 +131,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
       <!-- Brand -->
       <NuxtLink to="/dashboard" class="app-header__brand">
         <div class="app-header__brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 12 12" fill="none" width="14" height="14">
-            <path d="M2 9L6 3L10 9H2Z" fill="white" opacity="0.95"/>
-            <path d="M4 9L6 6L8 9H4Z" fill="white" opacity="0.5"/>
-          </svg>
+          <img src="/logo-mark.svg" alt="" />
         </div>
         <div class="app-header__brand-text">
           <span class="app-header__brand-name">SiloXR</span>
@@ -126,7 +154,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
       <div class="app-header__right">
 
         <!-- Pro badge with shimmer -->
-        <div v-if="user?.is_pro" class="app-header__pro-badge shimmer-badge">
+        <div v-if="headerUser?.is_pro" class="app-header__pro-badge shimmer-badge">
           <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
             <path d="M4 1L5.2 3.2L7.6 3.6L5.8 5.4L6.2 7.8L4 6.6L1.8 7.8L2.2 5.4L0.4 3.6L2.8 3.2L4 1Z"
               fill="currentColor"/>
@@ -173,7 +201,7 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
           <div class="app-header__avatar">{{ userInitial }}</div>
           <div class="app-header__user-info">
             <span class="app-header__user-name">{{ displayUserName }}</span>
-            <span class="app-header__user-role">{{ user?.is_pro ? 'Pro' : 'Free' }}</span>
+            <span class="app-header__user-role">{{ headerUser?.is_pro ? 'Pro' : 'Free' }}</span>
           </div>
         </button>
 
@@ -189,7 +217,6 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
     </div>
 
     <TourOverlay v-if="(isDashboard || isWorkspace) && showHeader" />
-    <OfflineBanner v-if="!isWorkspace" />
   </div>
 </template>
 

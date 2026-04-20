@@ -162,13 +162,15 @@ def normalize_product_name(product_name: str, category: str = "") -> str:
 
 
 class NigeriaBaselineService:
-    COUNTRY = "nigeria"
-
     def for_product(self, product):
+        country = clean_source_text(getattr(product.owner, "country", "") or "").lower() or "nigeria"
+        if country != "nigeria":
+            return None
+
         industry = normalize_industry(getattr(product.owner, "business_type", "") or "retail")
         category = normalize_category(getattr(product, "category", ""))
         generic = normalize_product_name(getattr(product, "name", ""), category)
-        qs = NigeriaBaselineProduct.objects.filter(country=self.COUNTRY, industry=industry).defer("avg_unit_price")
+        qs = NigeriaBaselineProduct.objects.filter(country=country, industry=industry).defer("avg_unit_price")
 
         try:
             candidate = qs.filter(generic_category=generic).order_by("-avg_weekly_turnover").first() if generic else None
@@ -194,7 +196,7 @@ class NigeriaBaselineService:
                     "daily_demand": float(aggregate["daily_demand"] or 0.0),
                     "cv_estimate": float(aggregate["cv_estimate"] or 0.0),
                     "lead_time_days": int(round(float(aggregate["lead_time_days"] or 3.0))),
-                    "message": "Based on similar businesses in Nigeria",
+                    "message": "Based on similar businesses in your market",
                 }
         if candidate is None:
             return None
@@ -206,5 +208,5 @@ class NigeriaBaselineService:
             "daily_demand": float(candidate.daily_demand),
             "cv_estimate": float(candidate.cv_estimate),
             "lead_time_days": int(candidate.lead_time_days),
-            "message": "Based on similar businesses in Nigeria",
+            "message": "Based on similar businesses in your market",
         }

@@ -3,6 +3,7 @@
 <script setup lang="ts">
 const { $api }    = useNuxtApp()
 const route       = useRoute()
+const currentUser = useState<any | null>("current-user", () => null)
 const file        = ref<File | null>(null)
 const uploading   = ref(false)
 const result      = ref<any>(null)
@@ -11,12 +12,19 @@ const dragOver    = ref(false)
 const mode        = ref<"sales" | "stock">(route.query.mode === "stock" ? "stock" : "sales")
 const defaultType = ref(mode.value === "stock" ? "RESTOCK" : "SALE")
 const config = useRuntimeConfig()
+const isProUser = computed(() => Boolean(currentUser.value?.is_pro))
+const uploadLimitLabel = computed(() =>
+  isProUser.value ? "Unlimited upload size on Pro" : "Max 1MB on Free"
+)
 useHead({ title: "Import data — SiloXR" })
 
 const handleFile = (f: File) => {
   file.value   = f
   result.value = null
   error.value  = ""
+  if (!isProUser.value && f.size > 1024 * 1024) {
+    error.value = "Free plan uploads are limited to 1MB. Upgrade to Pro for unlimited upload size."
+  }
 }
 
 const onDrop = (e: DragEvent) => {
@@ -27,6 +35,10 @@ const onDrop = (e: DragEvent) => {
 
 const upload = async () => {
   if (!file.value) return
+  if (!isProUser.value && file.value.size > 1024 * 1024) {
+    error.value = "Free plan uploads are limited to 1MB. Upgrade to Pro for unlimited upload size."
+    return
+  }
   uploading.value = true
   error.value     = ""
   result.value    = null
@@ -49,6 +61,11 @@ const valid = computed(() => ["csv", "xlsx", "xls", "pdf"].includes(ext.value))
 
 watch(mode, (next) => {
   defaultType.value = next === "stock" ? "RESTOCK" : "SALE"
+})
+
+onMounted(async () => {
+  if (currentUser.value) return
+  currentUser.value = await $api("/auth/me/").catch(() => null)
 })
 </script>
 
@@ -73,6 +90,7 @@ watch(mode, (next) => {
         {{ mode === "sales"
           ? "CSV and Excel are supported for sales history. Include the sale date or date-time on each row."
           : "CSV and Excel are supported for restocks and stock counts. Include the real movement date or count date on each row." }}
+        {{ ` ${uploadLimitLabel}.` }}
       </p>
     </div>
 

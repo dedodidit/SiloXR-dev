@@ -8,6 +8,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: [
     "@vueuse/nuxt",
+    "@vercel/analytics",
   ],
   components: [
     { path: "~/components", pathPrefix: false },
@@ -20,6 +21,9 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
+      siteUrl:
+        process.env.NUXT_PUBLIC_SITE_URL ??
+        "https://siloxr.com",
       apiBase:
         process.env.NUXT_PUBLIC_API_BASE ??
         (process.env.NODE_ENV === "development"
@@ -29,10 +33,32 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
+      htmlAttrs: {
+        lang: "en",
+      },
       title: "SiloXR",
+      titleTemplate: "%s",
+      charset: "utf-8",
       meta: [
         { name: "viewport",    content: "width=device-width, initial-scale=1" },
-        { name: "description", content: "Business decision engine" },
+        { name: "description", content: "SiloXR is the inventory decision engine that analyzes sales patterns and demand trends to predict stock risks and tell you exactly what to reorder." },
+        { name: "format-detection", content: "telephone=no" },
+        { name: "theme-color", content: "#534AB7" },
+        { property: "og:site_name", content: "SiloXR" },
+      ],
+      link: [
+        { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+        { rel: "alternate icon", href: "/favicon.ico" },
+        { rel: "manifest", href: "/site.webmanifest" },
+      ],
+    },
+  },
+  nitro: {
+    prerender: {
+      routes: [
+        "/",
+        "/robots.txt",
+        "/sitemap.xml",
       ],
     },
   },
@@ -46,5 +72,5 @@ export default defineNuxtConfig({
       ],
     },
   },
-  ssr: false,
+  ssr: true,
 })

@@ -20,11 +20,29 @@ ALLOWED_HOSTS = [
     if host.strip()
 ]
 
+if not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [
+        "siloxr-dev.onrender.com",
+        "siloxr.com",
+        "www.siloxr.com",
+    ]
+
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+
+if not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [
+        origin
+        for origin in [
+            _origin_from_url(FRONTEND_BASE_URL),
+            "https://siloxr.com",
+            "https://www.siloxr.com",
+        ]
+        if origin
+    ]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

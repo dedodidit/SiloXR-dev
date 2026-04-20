@@ -1,0 +1,26 @@
+services:
+  - name: siloxr-dev
+    type: web
+    runtime: python
+    rootDir: venv/siloxr
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn siloxr.wsgi:application --bind 0.0.0.0:$PORT
+
+  - name: siloxr-opening-brief
+    type: cron
+    runtime: python
+    rootDir: venv/siloxr
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 7 * * *"
+    startCommand: python manage.py send_business_briefs --brief opening
+
+  - name: siloxr-closing-brief
+    type: cron
+    runtime: python
+    rootDir: venv/siloxr
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 17 * * *"
+    startCommand: python manage.py send_business_briefs --brief closing

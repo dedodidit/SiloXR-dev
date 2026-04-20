@@ -83,7 +83,9 @@ export interface UserContextSummary {
   name:          string
   business_name: string
   business_type: string
-  tier:          "free" | "pro"
+  country?:      string
+  currency?:     string
+  tier:          "free" | "core" | "pro" | "enterprise"
   is_pro:        boolean
 }
 
@@ -121,7 +123,7 @@ export interface DashboardSummary {
   products_low_confidence:  number
   critical_alerts:          number
   avg_confidence:           number
-  tier:                     "free" | "pro"
+  tier:                     "free" | "core" | "pro" | "enterprise"
   is_pro:                   boolean
   active_decisions:         Decision[] | null
   top_priorities:           Decision[]
@@ -141,7 +143,7 @@ export interface DashboardSummary {
   }
   managerial_signals: ManagerialSignal[]
   usage_policy: {
-    tier: "free" | "pro"
+    tier: "free" | "core" | "pro" | "enterprise"
     unlimited: boolean
     refresh_interval_seconds: number
     policy_summary: string
@@ -174,6 +176,35 @@ export interface PortfolioSummary {
   forecast_accuracy: number
   confidence_score: number
   overstock_capital: number
+}
+
+export interface BusinessHealthSummary {
+  estimated_monthly_revenue: number
+  estimated_weekly_revenue: number
+  potential_revenue_gap_weekly: number
+  confidence_score: number
+}
+
+export interface BusinessHealthTopProduct {
+  name: string
+  estimated_weekly_revenue: number
+}
+
+export interface BusinessHealthDemandGap {
+  name: string
+  expected_weekly_demand: number
+  observed_weekly_demand: number
+  gap_units: number
+  gap_revenue: number
+  confidence: number
+}
+
+export interface BusinessHealthReport {
+  summary: BusinessHealthSummary
+  top_products: BusinessHealthTopProduct[]
+  demand_gaps: BusinessHealthDemandGap[]
+  insights: string[]
+  investor_summary: string
 }
 
 export interface ReorderRecord {

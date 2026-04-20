@@ -1,12 +1,18 @@
 # backend/apps/api/tests/test_api.py
 
 from datetime import timedelta
+from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.inventory.models import DecisionLog, ForecastSnapshot, Product
+from apps.billing.enums import PlanType
+from apps.billing.models import Business
+from apps.core.models import NigeriaBaselineProduct
+from apps.inventory.models import BurnRate, DecisionLog, ForecastSnapshot, Product
 from apps.inventory.events import EventProcessor
 
 
@@ -89,6 +95,18 @@ class TestProductEndpoints(APITestBase):
             # verified_quantity intentionally omitted
         })
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_stock_count_event_can_use_verified_quantity_as_quantity(self):
+        self.auth_pro()
+        url  = f"/api/v1/products/{self.product.id}/events/"
+        resp = self.client.post(url, {
+            "event_type": "STOCK_COUNT",
+            "verified_quantity": 24,
+            "occurred_at": timezone.now().isoformat(),
+        })
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.last_verified_quantity, 24)
 
     def test_soft_delete_preserves_event_history(self):
         self.auth_pro()
@@ -194,6 +212,108 @@ class TestDashboardEndpoints(APITestBase):
         self.assertIn("status", resp.data)
 
 
+class TestBusinessHealthEndpoints(APITestBase):
+
+    def test_summary_returns_structured_business_health_report(self):
+        self.auth_pro()
+        self.product.name = "Coca-Cola 50cl PET"
+        self.product.selling_price = 300
+        self.product.confidence_score = 0.72
+        self.product.category = "beverages"
+        self.product.save(update_fields=["name", "selling_price", "confidence_score", "category"])
+
+        BurnRate.objects.create(
+            product=self.product,
+            burn_rate_per_day=5.0,
+            burn_rate_std_dev=1.0,
+            sample_event_count=8,
+            confidence_score=0.76,
+            window_days=30,
+        )
+        NigeriaBaselineProduct.objects.create(
+            country="nigeria",
+            industry="retail",
+            category="beverages",
+            generic_category="carbonated_soft_drink",
+            product_name="Coca-Cola 50cl PET",
+            unit_type="unit",
+            weekly_turnover_low=30.0,
+            weekly_turnover_high=42.0,
+            avg_weekly_turnover=35.0,
+            demand_std=4.0,
+            daily_demand=5.0,
+            avg_unit_price=300.0,
+            cv_estimate=0.2,
+            lead_time_days=2,
+            source="test_fixture",
+        )
+
+        resp = self.client.get("/api/v1/business-health/summary/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("summary", resp.data)
+        self.assertIn("top_products", resp.data)
+        self.assertIn("demand_gaps", resp.data)
+        self.assertIn("investor_summary", resp.data)
+        self.assertEqual(resp.data["summary"]["estimated_weekly_revenue"], 10500.0)
+        self.assertGreaterEqual(resp.data["summary"]["potential_revenue_gap_weekly"], 0.0)
+        self.assertEqual(resp.data["top_products"][0]["name"], "Coca-Cola 50cl PET")
+
+
+class TestTelegramLinkEndpoint(APITestBase):
+
+    @override_settings(TELEGRAM_BOT_USERNAME=12345)
+    def test_telegram_link_handles_non_string_bot_username(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/telegram/link/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["bot_user"], "12345")
+        self.assertIn("https://t.me/12345?start=", resp.data["link"])
+
+    @override_settings(TELEGRAM_BOT_USERNAME=None)
+    def test_telegram_link_returns_503_when_bot_username_missing(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/telegram/link/")
+
+        self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(resp.data["detail"], "Telegram linking is not configured yet.")
+
+    @override_settings(TELEGRAM_BOT_USERNAME="siloxr_bot")
+    def test_profile_includes_telegram_link_for_unlinked_user(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/profile/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("telegram_link", resp.data)
+        self.assertTrue(resp.data["telegram_link"].startswith("https://t.me/siloxr_bot?start="))
+        self.assertIn("telegram_bot_user", resp.data)
+        self.assertEqual(resp.data["telegram_bot_user"], "siloxr_bot")
+
+
+class TestNotificationStatusEndpoint(APITestBase):
+
+    @override_settings(
+        EMAIL_HOST="smtp.gmail.com",
+        EMAIL_PORT=587,
+        EMAIL_HOST_USER="hello@example.com",
+        EMAIL_HOST_PASSWORD="secret",
+        DEFAULT_FROM_EMAIL="SiloXR <hello@example.com>",
+    )
+    def test_notification_status_reports_email_readiness(self):
+        self.auth_pro()
+
+        resp = self.client.get("/api/v1/notifications/status/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["preferred_channel"], "email")
+        self.assertTrue(resp.data["email"]["ready"])
+        self.assertEqual(resp.data["recommended_channel"], "email")
+
+
 class TestOfflineSync(APITestBase):
 
     def test_bulk_sync_creates_events(self):
@@ -257,3 +377,114 @@ class TestOfflineSync(APITestBase):
         self.assertEqual(resp.status_code, status.HTTP_207_MULTI_STATUS)
         self.assertEqual(resp.data["summary"]["succeeded"], 1)
         self.assertEqual(resp.data["summary"]["failed"],    1)
+
+
+class TestRegistrationAndUpload(APITestBase):
+
+    def test_register_persists_country_and_currency(self):
+        resp = self.client.post("/api/v1/auth/register/", {
+            "username": "global-owner",
+            "email": "global-owner@example.com",
+            "password": "SecurePass123!",
+            "business_name": "Global Foods Ltd",
+            "business_type": "retail",
+            "country": "ghana",
+            "currency": "USD",
+            "terms_accepted": True,
+            "terms_version": "test-v1",
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["country"], "ghana")
+        self.assertEqual(resp.data["currency"], "GHS")
+
+        business = Business.objects.get(owner__username="global-owner")
+        self.assertEqual(business.name, "Global Foods Ltd")
+        self.assertEqual(business.country, "GH")
+        self.assertEqual(business.currency, "GHS")
+        self.assertEqual(business.active_subscription.plan, PlanType.FREE)
+
+    def test_free_uploads_over_1mb_are_rejected(self):
+        self.auth_free()
+        oversized = SimpleUploadedFile(
+            "sales.csv",
+            b"a" * (1024 * 1024 + 1),
+            content_type="text/csv",
+        )
+
+        resp = self.client.post("/api/v1/upload/", {
+            "file": oversized,
+            "default_event_type": "SALE",
+        })
+
+        self.assertEqual(resp.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+    def test_pro_uploads_over_1mb_can_continue_to_validation(self):
+        self.auth_pro()
+        oversized = SimpleUploadedFile(
+            "sales.csv",
+            b"a" * (1024 * 1024 + 1),
+            content_type="text/csv",
+        )
+
+        resp = self.client.post("/api/v1/upload/", {
+            "file": oversized,
+            "default_event_type": "SALE",
+        })
+
+        self.assertNotEqual(resp.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@siloxr.com",
+    )
+    def test_register_sends_welcome_email_when_delivery_is_ready(self):
+        resp = self.client.post("/api/v1/auth/register/", {
+            "username": "mailer",
+            "email": "mailer@example.com",
+            "password": "SecurePass123!",
+            "business_name": "Mailer Ltd",
+            "business_type": "retail",
+            "country": "ghana",
+            "terms_accepted": True,
+            "terms_version": "test-v1",
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp.data["welcome_email_sent"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Welcome to SiloXR")
+
+
+class TestAuthEmailDelivery(APITestBase):
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@siloxr.com",
+    )
+    def test_login_sends_email_when_enabled(self):
+        resp = self.client.post("/api/v1/auth/login/", {
+            "identifier": "free",
+            "password": "pass",
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data["login_email_sent"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "SiloXR login alert")
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@siloxr.com",
+    )
+    def test_authenticated_user_can_send_test_email(self):
+        self.auth_free()
+
+        resp = self.client.post("/api/v1/notifications/test-email/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data["ready"])
+        self.assertTrue(resp.data["sent"])
+        self.assertEqual(resp.data["recipient"], self.free_user.email)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "SiloXR test email")

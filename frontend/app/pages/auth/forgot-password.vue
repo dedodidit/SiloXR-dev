@@ -9,6 +9,8 @@ const newPwd = ref("")
 const confirm = ref("")
 const loading = ref(false)
 const error = ref("")
+const showNewPassword = ref(false)
+const showConfirmPassword = ref(false)
 
 const sendCode = async () => {
   error.value = ""
@@ -80,11 +82,33 @@ useHead({ title: "Reset password - SiloXR" })
         </div>
         <div class="field">
           <label class="field__label">New password</label>
-          <input v-model="newPwd" class="field__input" type="password" required />
+          <div class="field__input-wrap">
+            <input
+              v-model="newPwd"
+              class="field__input"
+              :type="showNewPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              required
+            />
+            <button type="button" class="field__toggle" @click="showNewPassword = !showNewPassword">
+              {{ showNewPassword ? "Hide" : "Show" }}
+            </button>
+          </div>
         </div>
         <div class="field">
           <label class="field__label">Confirm new password</label>
-          <input v-model="confirm" class="field__input" type="password" required />
+          <div class="field__input-wrap">
+            <input
+              v-model="confirm"
+              class="field__input"
+              :type="showConfirmPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+              required
+            />
+            <button type="button" class="field__toggle" @click="showConfirmPassword = !showConfirmPassword">
+              {{ showConfirmPassword ? "Hide" : "Show" }}
+            </button>
+          </div>
         </div>
         <p v-if="error" class="auth-error">{{ error }}</p>
         <button type="submit" class="auth-btn" :disabled="loading">
@@ -123,6 +147,9 @@ useHead({ title: "Reset password - SiloXR" })
   flex-direction: column;
   gap: 6px;
 }
+.field__input-wrap {
+  position: relative;
+}
 .field__label {
   font-size: 12px;
   font-weight: 600;
@@ -143,6 +170,18 @@ useHead({ title: "Reset password - SiloXR" })
   outline: none;
   border-color: var(--purple);
   box-shadow: 0 0 0 3px rgba(83,74,183,0.1);
+}
+.field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .auth-error {
   font-size: 13px;

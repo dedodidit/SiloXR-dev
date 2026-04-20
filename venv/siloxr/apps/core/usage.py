@@ -4,6 +4,8 @@ from datetime import timedelta
 from django.core.cache import cache
 from django.utils import timezone
 
+from apps.billing.enums import PlanType
+
 
 @dataclass(frozen=True)
 class UsagePolicy:
@@ -24,16 +26,17 @@ class UsagePolicyService:
     FREE_REFRESH_INTERVAL_SECONDS = 5 * 60
 
     def get_policy(self, user) -> UsagePolicy:
-        if getattr(user, "is_pro", False):
+        current_plan = getattr(user, "current_plan", getattr(user, "tier", PlanType.FREE))
+        if current_plan != PlanType.FREE:
             return UsagePolicy(
-                tier="pro",
+                tier=current_plan,
                 unlimited=True,
                 refresh_interval_seconds=0,
                 policy_summary="Unlimited intelligence refreshes and interaction frequency.",
             )
 
         return UsagePolicy(
-            tier="free",
+            tier=PlanType.FREE,
             unlimited=False,
             refresh_interval_seconds=self.FREE_REFRESH_INTERVAL_SECONDS,
             policy_summary="Full intelligence access with a managed refresh cadence for production sustainability.",

@@ -29,6 +29,13 @@ export const workspaceSections: WorkspaceSection[] = [
     icon: "M3 17l5-5 4 4 8-8",
   },
   {
+    slug: "business-health",
+    title: "Business health",
+    description: "Turn operating data into a structured descriptive view of revenue, gaps, and business condition.",
+    helper: "Executive summary, revenue picture, top products, and benchmark gaps in one report workspace.",
+    icon: "M4 19h16M7 16l3-4 3 2 4-6 3 2",
+  },
+  {
     slug: "product-operations",
     title: "Product operations",
     description: "Manage product execution with forecast, stock actions, and product controls together.",

@@ -1,6 +1,59 @@
 from django.conf import settings
 from django.db import models
 
+from .enums import PlanType
+from .services import PricingService
+
+
+class Business(models.Model):
+    owner = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="business_profile",
+        null=True,
+        blank=True,
+    )
+    name = models.CharField(max_length=200)
+    country = models.CharField(max_length=8, default="OTHER")
+    currency = models.CharField(max_length=10, default="USD")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "billing_business"
+        ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        self.country = PricingService.normalize_country(self.country)
+        self.currency = PricingService.get_currency(self.country)
+        super().save(*args, **kwargs)
+
+    @property
+    def active_subscription(self):
+        return self.subscriptions.filter(active=True).order_by("-updated_at", "-created_at").first()
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Subscription(models.Model):
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.CASCADE,
+        related_name="subscriptions",
+    )
+    plan = models.CharField(max_length=20, choices=PlanType.choices, default=PlanType.FREE)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "billing_subscription"
+        ordering = ["-updated_at", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.business_id}:{self.plan}:{'active' if self.active else 'inactive'}"
+
 
 class PaymentTransaction(models.Model):
     PROVIDER_PAYSTACK = "paystack"

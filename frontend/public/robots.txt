@@ -1,2 +1,12 @@
 User-Agent: *
-Disallow:
+Allow: /
+Disallow: /auth/
+Disallow: /dashboard
+Disallow: /workspace/
+Disallow: /products/
+Disallow: /profile
+Disallow: /upload
+Disallow: /onboarding
+Disallow: /billing/
+
+Sitemap: https://siloxr.com/sitemap.xml

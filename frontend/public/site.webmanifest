@@ -1,0 +1,16 @@
+{
+  "name": "SiloXR",
+  "short_name": "SiloXR",
+  "description": "SiloXR is the inventory decision engine that analyzes sales patterns and demand trends to predict stock risks and tell you exactly what to reorder.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f3ef",
+  "theme_color": "#534AB7",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

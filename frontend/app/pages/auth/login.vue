@@ -8,6 +8,7 @@ const identifier = ref("")
 const password = ref("")
 const error = ref("")
 const loading = ref(false)
+const showPassword = ref(false)
 
 const login = async () => {
   error.value = ""
@@ -41,45 +42,50 @@ const login = async () => {
     panel-title="Decision operating system"
     panel-copy="The fastest path back into your current money posture, active decisions, and product execution flow."
   >
-      <form class="auth-form" @submit.prevent="login">
-        <div class="field">
-          <label class="field__label">Username or email</label>
-          <input
-            v-model="identifier"
-            class="field__input"
-            type="text"
-            placeholder="your username or email"
-            autocomplete="username"
-            required
-          />
-        </div>
+    <form class="auth-form" @submit.prevent="login">
+      <div class="field">
+        <label class="field__label">Username or email</label>
+        <input
+          v-model="identifier"
+          class="field__input"
+          type="text"
+          placeholder="your username or email"
+          autocomplete="username"
+          required
+        />
+      </div>
 
-        <div class="field">
-          <label class="field__label">Password</label>
+      <div class="field">
+        <label class="field__label">Password</label>
+        <div class="field__input-wrap">
           <input
             v-model="password"
             class="field__input"
-            type="password"
-            placeholder="••••••••"
+            :type="showPassword ? 'text' : 'password'"
+            placeholder="Enter your password"
             autocomplete="current-password"
             required
           />
+          <button type="button" class="field__toggle" @click="showPassword = !showPassword">
+            {{ showPassword ? "Hide" : "Show" }}
+          </button>
         </div>
-
-        <p v-if="error" class="auth-error">{{ error }}</p>
-
-        <button type="submit" class="auth-btn" :disabled="loading">
-          {{ loading ? "Signing in…" : "Sign in" }}
-        </button>
-      </form>
-
-      <div class="auth-links">
-        <NuxtLink to="/auth/forgot-password" class="auth-link">Forgot password?</NuxtLink>
-        <p class="auth-switch">
-          No account?
-          <NuxtLink to="/auth/signup" class="auth-link">Create one free</NuxtLink>
-        </p>
       </div>
+
+      <p v-if="error" class="auth-error">{{ error }}</p>
+
+      <button type="submit" class="auth-btn" :disabled="loading">
+        {{ loading ? "Signing in..." : "Sign in" }}
+      </button>
+    </form>
+
+    <div class="auth-links">
+      <NuxtLink to="/auth/forgot-password" class="auth-link">Forgot password?</NuxtLink>
+      <p class="auth-switch">
+        No account?
+        <NuxtLink to="/auth/signup" class="auth-link">Create one free</NuxtLink>
+      </p>
+    </div>
   </AuthShell>
 </template>
 
@@ -94,12 +100,16 @@ const login = async () => {
   flex-direction: column;
   gap: 6px;
 }
+.field__input-wrap {
+  position: relative;
+}
 .field__label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-3);
 }
 .field__input {
+  width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -110,6 +120,18 @@ const login = async () => {
   outline: none;
   border-color: var(--purple);
   box-shadow: 0 0 0 3px rgba(83,74,183,0.1);
+}
+.field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .auth-error {
   font-size: 13px;

@@ -17,10 +17,7 @@ defineProps<{
       <aside class="auth-shell__panel">
         <div class="auth-shell__brand">
           <div class="auth-shell__brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 12 12" fill="none" width="14" height="14">
-              <path d="M2 9L6 3L10 9H2Z" fill="white" opacity="0.95" />
-              <path d="M4 9L6 6L8 9H4Z" fill="white" opacity="0.5" />
-            </svg>
+            <img src="/logo-mark.svg" alt="" />
           </div>
           <div>
             <p class="auth-shell__brand-name">SiloXR</p>
@@ -124,6 +121,11 @@ defineProps<{
   justify-content: center;
   background: rgba(255,255,255,0.12);
   border: 1px solid rgba(255,255,255,0.18);
+}
+.auth-shell__brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .auth-shell__brand-name {
   font-size: 18px;

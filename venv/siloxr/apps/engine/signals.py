@@ -4,6 +4,8 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from apps.billing.enums import FeatureFlag
+from apps.billing.services import FeatureGateService
 from apps.inventory.models import BurnRate, ForecastSnapshot, InventoryEvent
 
 logger = logging.getLogger(__name__)
@@ -62,7 +64,7 @@ def trigger_decision_on_forecast(
     ForecastSnapshot (new)
       → Decision Engine → DecisionLog → Notification
 
-    Gate: only runs for Pro users.
+    Gate: only runs for plans with action-layer access.
     Free users' products are learned and forecasted but not decided.
     """
     if not created:
@@ -70,9 +72,9 @@ def trigger_decision_on_forecast(
 
     product = instance.product
 
-    if not product.owner.is_pro:
+    if not FeatureGateService.has_access(product.owner.current_plan, FeatureFlag.VIEW_ACTIONS):
         logger.debug(
-            "Decision skipped for %s — owner is not Pro tier", product.sku
+            "Decision skipped for %s because the current plan has no action access", product.sku
         )
         return
 
