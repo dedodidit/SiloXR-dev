@@ -203,6 +203,20 @@ class ProductUpdateReminderTests(TestCase):
         self.assertTrue(status["email"]["ready"])
         self.assertEqual(status["recommended_channel"], "email")
 
+    @override_settings(
+        TELEGRAM_BOT_USERNAME="SiloXRbot",
+        TELEGRAM_BOT_TOKEN="token",
+    )
+    def test_notification_channel_status_reports_telegram_configuration(self):
+        user = self._make_user(preferred_channel="telegram", telegram_enabled=True)
+        TelegramProfile.objects.create(user=user, chat_id=999999999, username="tester", is_active=True)
+
+        status = notification_channel_status(user)
+
+        self.assertTrue(status["telegram"]["configured"])
+        self.assertTrue(status["telegram"]["ready"])
+        self.assertEqual(status["recommended_channel"], "telegram")
+
     def test_resolve_business_brief_type_uses_business_windows(self):
         opening = datetime(2026, 3, 23, 7, 30, tzinfo=dt_timezone.utc)
         closing = datetime(2026, 3, 23, 17, 30, tzinfo=dt_timezone.utc)
