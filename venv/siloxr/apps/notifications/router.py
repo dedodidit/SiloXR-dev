@@ -382,10 +382,7 @@ class NotificationRouter:
         return result
 
     def _should_telegram(self, user, decision) -> bool:
-        """Send via Telegram if user has linked their account and it's enabled."""
-        preferred = getattr(user, "preferred_channel", "email")
-        if preferred != "telegram":
-            return False
+        """Send via Telegram if the user enabled and linked Telegram."""
         if not getattr(user, "telegram_enabled", False):
             return False
         try:
@@ -396,21 +393,10 @@ class NotificationRouter:
 
     def _should_email(self, user, decision, result: RoutingResult) -> bool:
         """
-        Send email if the user has email delivery enabled and either:
-          - email is the preferred channel
-          - telegram was preferred but is not currently linked/delivered
-          - Pro routing needs a fallback after no premium channel delivered
+        Send email whenever the user has opted in and the address is present.
+        Channel preference is used for ordering elsewhere, not for blocking a
+        valid delivery path.
         """
         if not getattr(user, "email", "") or not getattr(user, "email_notifications_enabled", True):
             return False
-        preferred = getattr(user, "preferred_channel", "email")
-        if preferred == "whatsapp":
-            preferred = "email"
-        if not user.is_pro:
-            if preferred == "email":
-                return True
-            return preferred == "telegram" and not result.telegram
-        else:
-            if preferred == "email":
-                return True
-            return not result.telegram
+        return True

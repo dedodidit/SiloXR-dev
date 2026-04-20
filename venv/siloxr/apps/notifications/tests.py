@@ -68,7 +68,8 @@ class ProductUpdateReminderTests(TestCase):
 
     @patch("apps.notifications.telegram.send_product_update_reminder", return_value=True)
     @patch("apps.notifications.dispatch.send_mail")
-    def test_route_product_update_reminder_prefers_telegram(self, send_mail_mock, telegram_mock):
+    def test_route_product_update_reminder_sends_both_ready_channels(self, send_mail_mock, telegram_mock):
+        send_mail_mock.return_value = 1
         user = self._make_user(preferred_channel="telegram", telegram_enabled=True)
         TelegramProfile.objects.create(user=user, chat_id=123456789, username="tester", is_active=True)
         product = self._make_product(user)
@@ -77,9 +78,25 @@ class ProductUpdateReminderTests(TestCase):
 
         self.assertTrue(result.in_app)
         self.assertTrue(result.telegram)
-        self.assertFalse(result.email)
+        self.assertTrue(result.email)
         telegram_mock.assert_called_once()
-        send_mail_mock.assert_not_called()
+        send_mail_mock.assert_called_once()
+
+    @patch("apps.notifications.telegram.send_product_update_reminder", return_value=True)
+    @patch("apps.notifications.dispatch.send_mail")
+    def test_route_product_update_reminder_sends_email_even_when_telegram_is_preferred(self, send_mail_mock, telegram_mock):
+        send_mail_mock.return_value = 1
+        user = self._make_user(preferred_channel="telegram", telegram_enabled=True)
+        TelegramProfile.objects.create(user=user, chat_id=123456789, username="tester", is_active=True)
+        product = self._make_product(user)
+
+        result = NotificationRouter().route_product_update_reminder(user, [product], cadence_hours=24)
+
+        self.assertTrue(result.in_app)
+        self.assertTrue(result.telegram)
+        self.assertTrue(result.email)
+        telegram_mock.assert_called_once()
+        send_mail_mock.assert_called_once()
 
     @patch("apps.notifications.dispatch.send_mail")
     def test_send_product_update_reminders_respects_cadence(self, send_mail_mock):
