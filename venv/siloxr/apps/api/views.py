@@ -1,11 +1,9 @@
 # backend/apps/api/views.py
-import hashlib
 from datetime import timedelta
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 import logging
-from django.core.cache import cache
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
@@ -45,36 +43,6 @@ from apps.core.statistics import compute_cv, expected_shortage, get_distribution
 
 logger = logging.getLogger(__name__)
 FREE_UPLOAD_LIMIT_BYTES = 1 * 1024 * 1024
-
-
-def _get_telegram_bot_username() -> str:
-    """
-    Return a normalized Telegram bot username from settings.
-
-    This is intentionally defensive because misconfigured env values should
-    degrade Telegram linking gracefully instead of crashing authenticated
-    requests with a raw 500.
-    """
-    from django.conf import settings as djsettings
-
-    raw_value = getattr(djsettings, "TELEGRAM_BOT_USERNAME", "")
-    if raw_value is None:
-        return ""
-
-    bot_user = str(raw_value).strip().lstrip("@")
-    return bot_user
-
-
-def _generate_telegram_link_token(user) -> str:
-    """
-    Generate a short-lived Telegram linking token without depending on the
-    notifications module import path.
-    """
-    token = hashlib.sha256(
-        f"{user.id}{timezone.now().timestamp()}".encode()
-    ).hexdigest()[:12].upper()
-    cache.set(f"telegram_link:{token}", str(user.id), timeout=1800)
-    return token
 
 
 def _maybe_send_automated_product_update_reminder(user) -> None:
@@ -130,11 +98,7 @@ def _feature_denied_response(plan: str, feature_name: str, required_plan: str) -
 
 
 def _send_welcome_email(user, *, preferred_channel: str) -> bool:
-    next_step = (
-        "Telegram was selected as your preferred channel. We will open your Telegram linking step immediately after signup."
-        if preferred_channel == user.CHANNEL_TELEGRAM else
-        "Email updates are enabled for your account, so important SiloXR updates can reach you here."
-    )
+    next_step = "Your account is ready, and you can start setting up products right away."
     subject = "Welcome to SiloXR"
     text_body = (
         f"Hi {user.username},\n\n"
@@ -1469,7 +1433,6 @@ def register(request):
     country = _normalize_country(request.data.get("country", ""))
     currency = _currency_for_country(country)
     email_notifications_enabled = bool(request.data.get("email_notifications_enabled", True))
-    telegram_requested = bool(request.data.get("telegram_enabled", False))
     preferred_channel = (request.data.get("preferred_channel", User.CHANNEL_EMAIL) or User.CHANNEL_EMAIL).strip().lower()
     terms_accepted = bool(request.data.get("terms_accepted", False))
     terms_version = request.data.get("terms_version", "placeholder-v1").strip() or "placeholder-v1"
@@ -1489,7 +1452,9 @@ def register(request):
             {"terms_accepted": ["You must accept the terms and conditions to continue."]},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if preferred_channel not in {User.CHANNEL_EMAIL, User.CHANNEL_TELEGRAM}:
+    if preferred_channel not in {User.CHANNEL_EMAIL, "whatsapp"}:
+        preferred_channel = User.CHANNEL_EMAIL
+    if preferred_channel == "whatsapp":
         preferred_channel = User.CHANNEL_EMAIL
 
     if User.objects.filter(username=username).exists():
@@ -1522,7 +1487,6 @@ def register(request):
         country=country,
         currency=currency,
         email_notifications_enabled=email_notifications_enabled,
-        telegram_enabled=False,
         preferred_channel=preferred_channel,
         terms_accepted_at=timezone.now(),
         terms_version=terms_version,
@@ -1546,16 +1510,6 @@ def register(request):
     except Exception as exc:
         logger.error("Business profile provisioning failed for %s: %s", user.username, exc, exc_info=True)
 
-    telegram_link = ""
-    telegram_bot_user = ""
-    if telegram_requested or preferred_channel == User.CHANNEL_TELEGRAM:
-        try:
-            token = _generate_telegram_link_token(user)
-            telegram_bot_user = _get_telegram_bot_username() or "siloxr_bot"
-            telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
-        except Exception as exc:
-            logger.error("Telegram signup link generation failed for %s: %s", user.username, exc, exc_info=True)
-
     welcome_email_sent = False
     try:
         welcome_email_sent = _send_welcome_email(user, preferred_channel=preferred_channel)
@@ -1571,8 +1525,6 @@ def register(request):
             "country": user.country,
             "currency": user.currency,
             "preferred_channel": user.preferred_channel,
-            "telegram_link": telegram_link,
-            "telegram_bot_user": telegram_bot_user,
             "welcome_email_sent": welcome_email_sent,
         },
         status=status.HTTP_201_CREATED,
@@ -1652,8 +1604,7 @@ def me(request):
         "avatar_url":                   user.avatar_url,
         "phone_number":                 user.phone_number,
         "whatsapp_enabled":             False,
-        "telegram_enabled":             user.telegram_enabled,
-        "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel == "whatsapp" else user.preferred_channel,
+        "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel not in {user.CHANNEL_EMAIL, user.CHANNEL_WHATSAPP} else user.preferred_channel,
         "whatsapp_critical_only":       False,
         "email_notifications_enabled":  user.email_notifications_enabled,
     })
@@ -2121,22 +2072,6 @@ def profile(request):
     user = request.user
     if request.method == "GET":
         _maybe_send_automated_product_update_reminder(user)
-        telegram_profile = getattr(user, "telegram_profile", None)
-        telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
-        telegram_link = ""
-        telegram_bot_user = ""
-        telegram_link_error = ""
-        if not telegram_linked:
-            try:
-                telegram_bot_user = _get_telegram_bot_username()
-                if telegram_bot_user:
-                    token = _generate_telegram_link_token(user)
-                    telegram_link = f"https://t.me/{telegram_bot_user}?start={token}"
-                else:
-                    telegram_link_error = "Telegram linking is not configured yet."
-            except Exception as exc:
-                logger.warning("Telegram link prebuild failed for %s: %s", user.username, exc, exc_info=True)
-                telegram_link_error = "Could not generate Telegram link right now."
         return Response({
             "id":                           str(user.id),
             "username":                     user.username,
@@ -2147,50 +2082,28 @@ def profile(request):
             "currency":                     user.currency,
             "phone_number":                 user.phone_number,
             "whatsapp_enabled":             False,
-            "telegram_enabled":             user.telegram_enabled,
-            "telegram_linked":              telegram_linked,
-            "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel == "whatsapp" else user.preferred_channel,
+            "preferred_channel":            user.CHANNEL_EMAIL if user.preferred_channel not in {user.CHANNEL_EMAIL, user.CHANNEL_WHATSAPP} else user.preferred_channel,
             "whatsapp_critical_only":       False,
             "email_notifications_enabled":  user.email_notifications_enabled,
             "avatar_url":                   user.avatar_url,
             "tier":                         user.current_plan,
             "is_pro":                       user.is_pro,
             "date_joined":                  user.date_joined,
-            "telegram_download_url":        "https://telegram.org/dl",
-            "telegram_bot_user":            telegram_bot_user,
-            "telegram_link":                telegram_link,
-            "telegram_link_error":          telegram_link_error,
         })
 
     # PATCH — update allowed fields
     allowed = [
         "business_name", "business_type", "phone_number",
         "email_notifications_enabled", "avatar_url",
-        "telegram_enabled", "preferred_channel", "country", "currency",
+        "preferred_channel", "country", "currency",
     ]
-    telegram_profile = getattr(user, "telegram_profile", None)
-    telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
-    if request.data.get("telegram_enabled") and not telegram_linked:
-        return Response(
-            {
-                "detail": "Link your Telegram account before enabling Telegram notifications.",
-                "telegram_download_url": "https://telegram.org/dl",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if request.data.get("preferred_channel") == user.CHANNEL_TELEGRAM and not telegram_linked:
-        return Response(
-            {
-                "detail": "Telegram must be linked before it can be selected as your preferred channel.",
-                "telegram_download_url": "https://telegram.org/dl",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
     for field in allowed:
         if field in request.data:
             value = request.data[field]
-            if field == "preferred_channel" and value == "whatsapp":
-                value = user.CHANNEL_EMAIL
+            if field == "preferred_channel":
+                value = str(value or "").strip().lower()
+                if value not in {user.CHANNEL_EMAIL, user.CHANNEL_WHATSAPP}:
+                    value = user.CHANNEL_EMAIL
             if field == "country":
                 value = _normalize_country(value)
             if field == "currency":
@@ -2345,56 +2258,3 @@ def verify_phone_otp(request):
 
 # backend/apps/api/views.py — ADD
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def telegram_webhook(request):
-    """
-    POST /api/telegram/webhook/
-    Receives Telegram bot updates.
-    Signature verification via X-Telegram-Bot-Api-Secret-Token header.
-    """
-    from apps.notifications.telegram import process_webhook
-    from django.conf import settings as djsettings
-
-    secret = getattr(djsettings, "TELEGRAM_WEBHOOK_SECRET", "")
-    if secret:
-        provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if provided != secret:
-            return HttpResponse(status=403)
-
-    process_webhook(request.data)
-    return HttpResponse(status=200)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def telegram_link_token(request):
-    """
-    GET /api/v1/telegram/link/
-    Generates a token the user sends to the bot to link their account.
-    Returns the bot username and the deep link URL.
-    """
-    bot_user = _get_telegram_bot_username()
-    if not bot_user:
-        return Response(
-            {"detail": "Telegram linking is not configured yet."},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-
-    try:
-        token = _generate_telegram_link_token(request.user)
-    except Exception as exc:
-        logger.error("Telegram link generation failed for %s: %s", request.user.username, exc, exc_info=True)
-        return Response(
-            {"detail": "Telegram linking is temporarily unavailable. Please try again shortly."},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-
-    link = f"https://t.me/{bot_user}?start={token}"
-
-    return Response({
-        "token":    token,
-        "bot_user": bot_user,
-        "link":     link,
-        "expires_in_minutes": 30,
-    })

@@ -138,14 +138,9 @@ def dispatch_dashboard_brief(user, summary_data, brief_type: str) -> bool:
 def notification_channel_status(user) -> dict:
     preferred = getattr(user, "preferred_channel", "email")
     email_address = getattr(user, "email", "") or ""
-    telegram_profile = getattr(user, "telegram_profile", None)
-    telegram_linked = bool(telegram_profile and getattr(telegram_profile, "is_active", False))
-    telegram_configured = bool(getattr(settings, "TELEGRAM_BOT_TOKEN", "") and getattr(settings, "TELEGRAM_BOT_USERNAME", ""))
     email_configured = _email_configured()
     email_enabled = bool(getattr(user, "email_notifications_enabled", True) and email_address)
     email_ready = email_enabled and email_configured
-    telegram_enabled = bool(getattr(user, "telegram_enabled", False))
-    telegram_ready = telegram_enabled and telegram_linked and telegram_configured
 
     def _last_sent(channel: str) -> str | None:
         sent_at = (
@@ -163,20 +158,13 @@ def notification_channel_status(user) -> dict:
             issues.append("Email delivery is disabled on your profile.")
         elif not email_configured:
             issues.append("Email delivery is not configured on the server.")
-    if preferred == "telegram" and not telegram_ready:
-        if not telegram_configured:
-            issues.append("Telegram is not configured on the server.")
-        elif not telegram_linked:
-            issues.append("Telegram is selected but not fully linked yet.")
-    if not email_ready and not telegram_ready:
+    if not email_ready:
         issues.append("Only in-app notifications are currently guaranteed.")
 
-    if preferred == "telegram" and telegram_ready:
-        recommended_channel = "telegram"
-    elif preferred == "email" and email_ready:
+    if preferred == "email" and email_ready:
         recommended_channel = "email"
     else:
-        recommended_channel = "email" if email_ready else "telegram" if telegram_ready else "in_app"
+        recommended_channel = "email" if email_ready else "in_app"
 
     return {
         "preferred_channel": preferred,
@@ -188,14 +176,6 @@ def notification_channel_status(user) -> dict:
             "ready": email_ready,
             "address": email_address,
             "last_sent_at": _last_sent(Notification.CHANNEL_EMAIL),
-        },
-        "telegram": {
-            "enabled": telegram_enabled,
-            "linked": telegram_linked,
-            "configured": telegram_configured,
-            "ready": telegram_ready,
-            "username": getattr(telegram_profile, "username", "") if telegram_profile else "",
-            "last_sent_at": _last_sent(Notification.CHANNEL_TELEGRAM),
         },
         "whatsapp": {
             "ready": False,

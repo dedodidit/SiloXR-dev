@@ -26,13 +26,6 @@ type NotificationStatus = {
     address: string
     last_sent_at: string | null
   }
-  telegram: {
-    enabled: boolean
-    linked: boolean
-    ready: boolean
-    username: string
-    last_sent_at: string | null
-  }
   whatsapp: {
     ready: boolean
     enabled: boolean
@@ -129,9 +122,6 @@ const sortedPlans = computed(() => {
 const channelSummary = computed(() => {
   const status = notificationStatus.value
   if (!status) return "Checking notification readiness..."
-  if (status.preferred_channel === "telegram" && status.telegram.ready) {
-    return "Telegram is ready for live delivery."
-  }
   if (status.email.ready) {
     return `Email is ready at ${status.email.address}.`
   }
@@ -252,11 +242,9 @@ useHead({ title: "SiloXR - Billing" })
           <span class="bill__channel-meta">{{ notificationStatus?.email.address || "No email address" }}</span>
         </div>
         <div class="bill__channel">
-          <span class="bill__channel-label">Telegram</span>
-          <strong>{{ notificationStatus?.telegram.ready ? "Ready" : "Not linked" }}</strong>
-          <span class="bill__channel-meta">
-            {{ notificationStatus?.telegram.username ? `@${notificationStatus.telegram.username}` : "Link from profile" }}
-          </span>
+          <span class="bill__channel-label">In-app</span>
+          <strong>Ready</strong>
+          <span class="bill__channel-meta">Always available inside SiloXR</span>
         </div>
       </div>
       <ul v-if="notificationStatus?.issues?.length" class="bill__issues">

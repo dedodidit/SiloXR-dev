@@ -258,42 +258,6 @@ class TestBusinessHealthEndpoints(APITestBase):
         self.assertEqual(resp.data["summary"]["estimated_weekly_revenue"], 10500.0)
         self.assertGreaterEqual(resp.data["summary"]["potential_revenue_gap_weekly"], 0.0)
         self.assertEqual(resp.data["top_products"][0]["name"], "Coca-Cola 50cl PET")
-
-
-class TestTelegramLinkEndpoint(APITestBase):
-
-    @override_settings(TELEGRAM_BOT_USERNAME=12345)
-    def test_telegram_link_handles_non_string_bot_username(self):
-        self.auth_pro()
-
-        resp = self.client.get("/api/v1/telegram/link/")
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["bot_user"], "12345")
-        self.assertIn("https://t.me/12345?start=", resp.data["link"])
-
-    @override_settings(TELEGRAM_BOT_USERNAME=None)
-    def test_telegram_link_returns_503_when_bot_username_missing(self):
-        self.auth_pro()
-
-        resp = self.client.get("/api/v1/telegram/link/")
-
-        self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
-        self.assertEqual(resp.data["detail"], "Telegram linking is not configured yet.")
-
-    @override_settings(TELEGRAM_BOT_USERNAME="siloxr_bot")
-    def test_profile_includes_telegram_link_for_unlinked_user(self):
-        self.auth_pro()
-
-        resp = self.client.get("/api/v1/profile/")
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn("telegram_link", resp.data)
-        self.assertTrue(resp.data["telegram_link"].startswith("https://t.me/siloxr_bot?start="))
-        self.assertIn("telegram_bot_user", resp.data)
-        self.assertEqual(resp.data["telegram_bot_user"], "siloxr_bot")
-
-
 class TestNotificationStatusEndpoint(APITestBase):
 
     @override_settings(

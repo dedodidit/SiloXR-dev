@@ -15,8 +15,6 @@ const otpSent = ref(false)
 const otpCode = ref("")
 const verifying = ref(false)
 const phoneInput = ref("")
-const telegramLinking = ref(false)
-const telegramLink = ref<any>(null)
 const showOldPassword = ref(false)
 const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
@@ -27,8 +25,6 @@ const form = reactive({
   phone_number: "",
   country: "",
   email_notifications_enabled: true,
-  telegram_enabled: false,
-  preferred_channel: "email",
   whatsapp_critical_only: false,
 })
 
@@ -46,21 +42,9 @@ const hydrateProfile = async () => {
     phone_number: user.value.phone_number,
     country: user.value.country || "",
     email_notifications_enabled: user.value.email_notifications_enabled,
-    telegram_enabled: !!user.value.telegram_enabled,
-    preferred_channel: user.value.preferred_channel || "email",
     whatsapp_critical_only: !!user.value.whatsapp_critical_only,
   })
   phoneInput.value = user.value.phone_number || ""
-  telegramLink.value = user.value.telegram_link
-    ? {
-        link: user.value.telegram_link,
-        token: user.value.telegram_link.split("start=").pop() || "",
-        bot_user: user.value.telegram_bot_user || "",
-      }
-    : null
-  if (!user.value.telegram_link && user.value.telegram_link_error) {
-    msg.value = user.value.telegram_link_error
-  }
 }
 
 onMounted(hydrateProfile)
@@ -133,35 +117,6 @@ const verifyOTP = async () => {
     msg.value = e?.data?.detail ?? "Invalid code."
   } finally {
     verifying.value = false
-  }
-}
-
-const getTelegramLink = async () => {
-  telegramLinking.value = true
-  msg.value = ""
-  try {
-    telegramLink.value = await $api("/telegram/link/")
-    if (process.client && telegramLink.value?.link) {
-      window.open(telegramLink.value.link, "_blank", "noopener,noreferrer")
-      msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
-    }
-  } catch (e: any) {
-    const fallbackLink = user.value?.telegram_link
-    if (fallbackLink) {
-      telegramLink.value = {
-        link: fallbackLink,
-        token: fallbackLink.split("start=").pop() || "",
-        bot_user: user.value?.telegram_bot_user || "",
-      }
-      if (process.client && telegramLink.value?.link) {
-        window.open(telegramLink.value.link, "_blank", "noopener,noreferrer")
-        msg.value = "Telegram opened. Send the start message there, then return here and save once the account is linked."
-        return
-      }
-    }
-    msg.value = e?.data?.detail ?? user.value?.telegram_link_error ?? "Could not generate Telegram link."
-  } finally {
-    telegramLinking.value = false
   }
 }
 
@@ -264,50 +219,6 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
         </div>
       </section>
 
-      <section class="profile-section surface">
-        <h2 class="profile-section__title">Telegram notifications</h2>
-        <p class="t-body" style="margin-bottom:14px">
-          Telegram must be linked to your SiloXR account before it can be used for real-time notifications. You can still change channel preference and delivery settings here any time.
-        </p>
-
-        <div v-if="user?.telegram_linked" class="profile-msg profile-msg--ok">
-          Telegram connected. You can enable Telegram delivery below.
-        </div>
-        <div v-else class="profile-telegram">
-          <a :href="user?.telegram_download_url || 'https://telegram.org/dl'" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
-            Download Telegram
-          </a>
-          <button class="btn btn-primary" :disabled="telegramLinking" @click="getTelegramLink">
-            {{ telegramLinking ? "Generating…" : "Connect Telegram" }}
-          </button>
-          <div v-if="telegramLink" class="profile-otp">
-            <p class="t-small">Open the bot link and send the start code to verify your Telegram account.</p>
-            <a :href="telegramLink.link" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="width:fit-content">
-              Open SiloXR bot
-            </a>
-            <p class="field__hint" style="margin-top:8px">Link expires in 30 minutes. Code: {{ telegramLink.token }}</p>
-          </div>
-          <p v-else-if="user?.telegram_link_error" class="profile-msg profile-msg--err" style="margin-top:12px">
-            {{ user.telegram_link_error }}
-          </p>
-        </div>
-
-        <div class="field" style="margin-top:16px">
-          <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
-            <input type="checkbox" v-model="form.telegram_enabled" :disabled="!user?.telegram_linked" />
-            Enable Telegram notifications
-          </label>
-        </div>
-
-        <div class="field" style="margin-top:16px">
-          <label class="field__label">Preferred notification channel</label>
-          <select v-model="form.preferred_channel" class="field__input">
-            <option value="email">Email</option>
-            <option value="telegram">Telegram</option>
-          </select>
-        </div>
-      </section>
-
       <section v-if="user?.is_pro" class="profile-section surface">
         <h2 class="profile-section__title">WhatsApp controls</h2>
         <div class="field">
@@ -398,9 +309,6 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
   flex-direction: column;
   gap: 6px;
 }
-.field__input-wrap {
-  position: relative;
-}
 .field__label {
   font-size: 12px;
   font-weight: 600;
@@ -411,45 +319,30 @@ const isFreeUser = computed(() => Boolean(user.value) && !user.value?.is_pro)
   color: var(--text-4);
 }
 .field__input {
-  padding: 10px 14px;
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--bg-card);
   color: var(--text);
-}
-.field__toggle {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  border: none;
-  background: transparent;
-  color: var(--purple);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+  padding: 10px 14px;
 }
 .profile-msg {
-  font-size: 12px;
-  padding: 8px 12px;
   border-radius: var(--r-sm);
+  font-size: 12px;
   margin-top: 8px;
+  padding: 8px 12px;
 }
 .profile-msg--ok { background: var(--teal-bg); color: var(--teal); }
 .profile-msg--err { background: var(--red-bg); color: var(--red); }
 .profile-actions,
-.profile-telegram {
+.profile-otp {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .profile-otp {
-  margin-top: 14px;
-  padding: 14px;
   background: var(--bg-sunken);
   border-radius: var(--r-md);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
 }
 </style>

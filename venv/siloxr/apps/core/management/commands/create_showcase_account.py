@@ -26,7 +26,7 @@ from apps.inventory.models import (
     UserBehaviorLog,
 )
 from apps.notifications.dispatch import _build_body, _build_title
-from apps.notifications.models import Notification, NotificationThrottle, TelegramProfile
+from apps.notifications.models import Notification, NotificationThrottle
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,6 @@ class Command(BaseCommand):
         with self._signals_suspended():
             user = self._create_or_update_user(options)
             self._reset_showcase_data(user)
-            self._link_channels(user)
 
             products = self._seed_products(user)
             self._seed_burn_rates(products)
@@ -108,8 +107,6 @@ class Command(BaseCommand):
                 "avatar_url": "",
                 "tier": User.TIER_PRO,
                 "tier_expires_at": timezone.now() + timedelta(days=180),
-                "preferred_channel": User.CHANNEL_TELEGRAM,
-                "telegram_enabled": True,
                 "whatsapp_enabled": True,
                 "whatsapp_critical_only": False,
                 "email_notifications_enabled": True,
@@ -123,19 +120,10 @@ class Command(BaseCommand):
     def _reset_showcase_data(self, user):
         Notification.objects.filter(user=user).delete()
         NotificationThrottle.objects.filter(user=user).delete()
-        TelegramProfile.objects.filter(user=user).delete()
         UserBehaviorLog.objects.filter(user=user).delete()
         InsightFeedback.objects.filter(user=user).delete()
         OTPVerification.objects.filter(user=user).delete()
         Product.objects.filter(owner=user).delete()
-
-    def _link_channels(self, user):
-        TelegramProfile.objects.create(
-            user=user,
-            chat_id=234000000001,
-            username="testpro_shop",
-            is_active=True,
-        )
 
     def _seed_products(self, user):
         now = timezone.now()
@@ -442,22 +430,10 @@ class Command(BaseCommand):
             Notification.objects.create(
                 user=user,
                 decision=live_decisions[1],
-                channel=Notification.CHANNEL_TELEGRAM,
-                title="Telegram insight delivered",
-                body="Bread is trending down faster than usual. Tap through to review the warning and confirm the shelf count.",
-                confidence=live_decisions[1].confidence_score,
-                is_read=True,
-                read_at=now - timedelta(hours=3),
-            )
-
-        if len(live_decisions) > 2:
-            Notification.objects.create(
-                user=user,
-                decision=live_decisions[2],
                 channel=Notification.CHANNEL_EMAIL,
                 title="Daily summary prepared",
                 body="Milk remains stable, while Coke and Battery Pack need closer attention over the next few days.",
-                confidence=live_decisions[2].confidence_score,
+                confidence=live_decisions[1].confidence_score,
                 is_read=True,
                 read_at=now - timedelta(hours=8),
             )

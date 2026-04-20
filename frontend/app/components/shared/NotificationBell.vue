@@ -42,7 +42,6 @@ const severityColor: Record<string, string> = {
 const channelLabel: Record<string, string> = {
   in_app: "In-app",
   email: "Email",
-  telegram: "Telegram",
   whatsapp: "WhatsApp",
 }
 </script>

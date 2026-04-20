@@ -45,9 +45,6 @@ EMAIL_HOST_USER=peopleofsiloxr@gmail.com
 EMAIL_HOST_PASSWORD=your-gmail-app-password
 DEFAULT_FROM_EMAIL=SiloXR <peopleofsiloxr@gmail.com>
 
-TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-TELEGRAM_BOT_USERNAME=your-telegram-bot-username
-TELEGRAM_WEBHOOK_SECRET=your-telegram-webhook-secret
 
 PAYSTACK_PUBLIC_KEY=your-paystack-public-key
 PAYSTACK_SECRET_KEY=your-paystack-secret-key

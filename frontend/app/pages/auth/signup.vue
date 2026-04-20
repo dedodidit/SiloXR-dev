@@ -58,8 +58,6 @@ const signUp = async () => {
         phone_number: "",
         country: form.country,
         email_notifications_enabled: true,
-        telegram_enabled: false,
-        preferred_channel: "email",
         terms_accepted: true,
         terms_version: termsVersion,
       },

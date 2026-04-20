@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.inventory.models import Product
-from apps.notifications.models import Notification, NotificationThrottle, TelegramProfile
+from apps.notifications.models import Notification, NotificationThrottle
 from apps.notifications.reminders import (
     maybe_send_automated_product_update_reminder,
     send_product_update_reminders,
@@ -28,7 +28,6 @@ class ProductUpdateReminderTests(TestCase):
             "email": f"user_{self.user_model.objects.count() + 1}@example.com",
             "preferred_channel": "email",
             "email_notifications_enabled": True,
-            "telegram_enabled": False,
             "tier": self.user_model.TIER_FREE,
         }
         defaults.update(overrides)
@@ -58,7 +57,6 @@ class ProductUpdateReminderTests(TestCase):
 
         self.assertTrue(result.in_app)
         self.assertTrue(result.email)
-        self.assertFalse(result.telegram)
         self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_IN_APP).count(), 1)
         self.assertEqual(Notification.objects.filter(user=user, channel=Notification.CHANNEL_EMAIL).count(), 1)
         self.assertTrue(
@@ -66,36 +64,16 @@ class ProductUpdateReminderTests(TestCase):
         )
         send_mail_mock.assert_called_once()
 
-    @patch("apps.notifications.telegram.send_product_update_reminder", return_value=True)
     @patch("apps.notifications.dispatch.send_mail")
-    def test_route_product_update_reminder_sends_both_ready_channels(self, send_mail_mock, telegram_mock):
+    def test_route_product_update_reminder_sends_email_when_ready(self, send_mail_mock):
         send_mail_mock.return_value = 1
-        user = self._make_user(preferred_channel="telegram", telegram_enabled=True)
-        TelegramProfile.objects.create(user=user, chat_id=123456789, username="tester", is_active=True)
+        user = self._make_user(preferred_channel="email")
         product = self._make_product(user)
 
         result = NotificationRouter().route_product_update_reminder(user, [product], cadence_hours=24)
 
         self.assertTrue(result.in_app)
-        self.assertTrue(result.telegram)
         self.assertTrue(result.email)
-        telegram_mock.assert_called_once()
-        send_mail_mock.assert_called_once()
-
-    @patch("apps.notifications.telegram.send_product_update_reminder", return_value=True)
-    @patch("apps.notifications.dispatch.send_mail")
-    def test_route_product_update_reminder_sends_email_even_when_telegram_is_preferred(self, send_mail_mock, telegram_mock):
-        send_mail_mock.return_value = 1
-        user = self._make_user(preferred_channel="telegram", telegram_enabled=True)
-        TelegramProfile.objects.create(user=user, chat_id=123456789, username="tester", is_active=True)
-        product = self._make_product(user)
-
-        result = NotificationRouter().route_product_update_reminder(user, [product], cadence_hours=24)
-
-        self.assertTrue(result.in_app)
-        self.assertTrue(result.telegram)
-        self.assertTrue(result.email)
-        telegram_mock.assert_called_once()
         send_mail_mock.assert_called_once()
 
     @patch("apps.notifications.dispatch.send_mail")
@@ -202,20 +180,6 @@ class ProductUpdateReminderTests(TestCase):
 
         self.assertTrue(status["email"]["ready"])
         self.assertEqual(status["recommended_channel"], "email")
-
-    @override_settings(
-        TELEGRAM_BOT_USERNAME="SiloXRbot",
-        TELEGRAM_BOT_TOKEN="token",
-    )
-    def test_notification_channel_status_reports_telegram_configuration(self):
-        user = self._make_user(preferred_channel="telegram", telegram_enabled=True)
-        TelegramProfile.objects.create(user=user, chat_id=999999999, username="tester", is_active=True)
-
-        status = notification_channel_status(user)
-
-        self.assertTrue(status["telegram"]["configured"])
-        self.assertTrue(status["telegram"]["ready"])
-        self.assertEqual(status["recommended_channel"], "telegram")
 
     def test_resolve_business_brief_type_uses_business_windows(self):
         opening = datetime(2026, 3, 23, 7, 30, tzinfo=dt_timezone.utc)

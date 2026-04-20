@@ -98,9 +98,6 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 # siloxr/settings/base.py — add
-TELEGRAM_BOT_TOKEN       = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_BOT_USERNAME    = os.environ.get("TELEGRAM_BOT_USERNAME", "siloxr_bot")
-TELEGRAM_WEBHOOK_SECRET  = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
 FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://127.0.0.1:3000")
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")

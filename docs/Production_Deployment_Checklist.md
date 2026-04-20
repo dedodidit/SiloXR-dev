@@ -9,7 +9,6 @@
    - `CSRF_TRUSTED_ORIGINS`
    - PostgreSQL credentials
    - Gmail SMTP credentials
-   - Telegram bot credentials
    - Paystack live keys
 3. Run Django with:
 
@@ -88,5 +87,4 @@ This is the day-to-day path for:
 The `.env` values shown earlier in chat included live-looking secrets. Rotate:
 
 - Gmail app password
-- Telegram bot token
 - any webhook/token values you already exposed

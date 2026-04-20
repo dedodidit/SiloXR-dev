@@ -24,12 +24,10 @@ class User(AbstractUser):
     )
     # backend/apps/core/models.py — ADD to User model
 
-    CHANNEL_TELEGRAM = "telegram"
     CHANNEL_EMAIL    = "email"
     CHANNEL_WHATSAPP = "whatsapp"
 
     CHANNEL_CHOICES = [
-        (CHANNEL_TELEGRAM, "Telegram"),
         (CHANNEL_EMAIL,    "Email"),
         (CHANNEL_WHATSAPP, "WhatsApp"),
     ]
@@ -43,7 +41,6 @@ class User(AbstractUser):
         default=False,
         help_text="If True, only send WhatsApp for ALERT_CRITICAL decisions"
     )
-    telegram_enabled        = models.BooleanField(default=False)
     business_name = models.CharField(max_length=200, blank=True, default="")
     avatar_url    = models.URLField(blank=True, default="")
     country = models.CharField(max_length=40, blank=True, default="")
