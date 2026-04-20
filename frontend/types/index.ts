@@ -117,6 +117,30 @@ export interface InventoryEventSummary {
   created_at: string
 }
 
+export type NotificationType =
+  | "stockout_risk"
+  | "dead_stock"
+  | "drop"
+  | "inactivity_risk"
+  | "generic"
+
+export interface NotificationRecord {
+  id: string
+  title: string
+  body: string
+  channel: "in_app" | "email" | "whatsapp" | string
+  confidence?: number | null
+  notification_type: NotificationType
+  reference_id: string
+  severity: "low" | "medium" | "high" | "critical" | string
+  payload: Record<string, any>
+  action?: DecisionAction | null
+  product_name?: string | null
+  product_sku?: string | null
+  created_at: string
+  is_read: boolean
+}
+
 export interface DashboardSummary {
   total_products:           number
   products_needing_action:  number

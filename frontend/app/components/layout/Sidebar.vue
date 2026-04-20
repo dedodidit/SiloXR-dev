@@ -17,6 +17,13 @@ const items = [
     href: "/dashboard",
   },
   {
+    id: "notifications",
+    label: "Notifications",
+    icon: "M9 18a3 3 0 006 0m-6 0h6m-9-3a1.5 1.5 0 01-1.5-1.5V9A6.5 6.5 0 1118 9v4.5A1.5 1.5 0 0116.5 15H6z",
+    tip: "Insight and inactivity alerts",
+    href: "/notifications",
+  },
+  {
     id: "command-center",
     label: "Command center",
     icon: "M12 3l8 4v10l-8 4-8-4V7l8-4zm0 0v18m8-14H4",

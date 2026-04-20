@@ -1305,13 +1305,15 @@ class DashboardViewSet(ViewSet):
 def notifications(request):
     """
     GET /api/v1/notifications/
-    Returns unread in-app notifications for the current user.
+    Returns recent notifications for the current user.
     """
     from apps.notifications.models import Notification
     _maybe_send_automated_product_update_reminder(request.user)
-    unread = Notification.objects.filter(
-        user=request.user, is_read=False
-    ).select_related("decision__product")[:50]
+    items = (
+        Notification.objects.filter(user=request.user)
+        .select_related("decision__product")
+        .order_by("-created_at")[:50]
+    )
 
     data = [{
         "id":          str(n.id),
@@ -1319,13 +1321,16 @@ def notifications(request):
         "body":        n.body,
         "channel":     n.channel,
         "confidence":  n.confidence,
+        "notification_type": getattr(n, "notification_type", "generic") or "generic",
+        "reference_id": getattr(n, "reference_id", "") or "",
+        "severity":    getattr(n, "severity", "medium") or "medium",
+        "payload":     getattr(n, "payload", {}) or {},
         "action":      n.decision.action if n.decision else None,
-        "severity":    n.decision.severity if n.decision else "info",
         "product_name": n.decision.product.name if n.decision else None,
         "product_sku": n.decision.product.sku if n.decision else None,
         "created_at":  n.created_at,
         "is_read":     n.is_read,
-    } for n in unread]
+    } for n in items]
 
     return Response(data)
 
