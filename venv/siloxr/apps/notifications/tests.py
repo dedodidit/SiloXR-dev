@@ -3,10 +3,10 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from apps.inventory.models import Product
+from apps.inventory.models import InventoryEvent, Product
 from apps.notifications.models import Notification, NotificationThrottle
 from apps.notifications.reminders import (
     maybe_send_automated_product_update_reminder,
@@ -15,6 +15,10 @@ from apps.notifications.reminders import (
 from apps.notifications.dispatch import dispatch_dashboard_insights, _send_email_message, notification_channel_status
 from apps.notifications.business_briefs import resolve_business_brief_type, send_business_briefs
 from apps.notifications.router import NotificationRouter
+from apps.notifications.services.inactivity_engine import evaluate_user_inactivity
+from apps.notifications.services.insight_engine import generate_product_insight
+from apps.notifications.services.notification_service import NotificationDispatchResult, send_notification
+from apps.notifications.management.commands.run_proactive_checks import run_proactive_checks
 
 
 class ProductUpdateReminderTests(TestCase):
@@ -206,3 +210,168 @@ class ProductUpdateReminderTests(TestCase):
         self.assertEqual(first.briefs_sent, 1)
         self.assertEqual(second.briefs_sent, 0)
         dispatch_brief_mock.assert_called_once()
+
+
+class InsightNotificationSystemTests(TransactionTestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        cache.clear()
+
+    def _make_user(self, **overrides):
+        defaults = {
+            "username": f"insight_user_{self.user_model.objects.count() + 1}",
+            "email": f"insight_{self.user_model.objects.count() + 1}@example.com",
+            "preferred_channel": "email",
+            "email_notifications_enabled": True,
+            "tier": self.user_model.TIER_FREE,
+        }
+        defaults.update(overrides)
+        return self.user_model.objects.create_user(password="Secret123!", **defaults)
+
+    def _make_product(self, user, **overrides):
+        defaults = {
+            "owner": user,
+            "name": f"Product {Product.objects.count() + 1}",
+            "sku": f"INS-{Product.objects.count() + 1}",
+            "unit": "packs",
+            "estimated_quantity": 10,
+            "last_verified_quantity": 10,
+            "last_verified_at": timezone.now() - timedelta(days=12),
+            "confidence_score": 0.7,
+            "selling_price": 1000,
+            "cost_price": 600,
+        }
+        defaults.update(overrides)
+        return Product.objects.create(**defaults)
+
+    def _add_sales(self, product, quantities, base_days_ago: int = 1):
+        now = timezone.now()
+        for offset, quantity in enumerate(quantities):
+            InventoryEvent.objects.create(
+                product=product,
+                recorded_by=product.owner,
+                event_type=InventoryEvent.SALE,
+                quantity=quantity,
+                notes="sale",
+                occurred_at=now - timedelta(days=base_days_ago + offset),
+            )
+
+    def test_generate_product_insight_flags_stockout_risk(self):
+        user = self._make_user(currency="NGN")
+        product = self._make_product(user, estimated_quantity=2, last_verified_quantity=2)
+        self._add_sales(product, [4, 4, 4], base_days_ago=1)
+
+        result = generate_product_insight(product)
+
+        self.assertTrue(result.should_notify)
+        self.assertEqual(result.notification_type, "stockout_risk")
+        self.assertIn("run out", result.message)
+        self.assertGreater(result.potential_revenue_loss_weekly, 0)
+
+    def test_generate_product_insight_flags_dead_stock(self):
+        user = self._make_user()
+        product = self._make_product(user, estimated_quantity=25, last_verified_quantity=25)
+        Product.objects.filter(id=product.id).update(created_at=timezone.now() - timedelta(days=14))
+        product.refresh_from_db()
+
+        result = generate_product_insight(product)
+
+        self.assertTrue(result.should_notify)
+        self.assertEqual(result.notification_type, "dead_stock")
+        self.assertIn("not moved", result.message)
+
+    def test_generate_product_insight_flags_abnormal_drop(self):
+        user = self._make_user()
+        product = self._make_product(user, estimated_quantity=20, last_verified_quantity=20)
+        self._add_sales(product, [6, 6, 6, 6, 6, 6, 6], base_days_ago=8)
+        self._add_sales(product, [1, 1], base_days_ago=1)
+
+        result = generate_product_insight(product)
+
+        self.assertTrue(result.should_notify)
+        self.assertEqual(result.notification_type, "drop")
+        self.assertIn("fell", result.message)
+
+    def test_send_notification_dedupes_same_type_reference(self):
+        user = self._make_user()
+
+        first = send_notification(
+            user,
+            "You may run out soon.",
+            "stockout_risk",
+            "product:123",
+            severity="medium",
+            title="Stockout risk",
+        )
+        second = send_notification(
+            user,
+            "You may run out soon.",
+            "stockout_risk",
+            "product:123",
+            severity="medium",
+            title="Stockout risk",
+        )
+
+        self.assertTrue(first.created)
+        self.assertFalse(second.created)
+        self.assertEqual(Notification.objects.filter(user=user, notification_type="stockout_risk").count(), 1)
+
+    def test_evaluate_user_inactivity_generates_risk(self):
+        user = self._make_user()
+        self._make_product(user)
+        self.user_model.objects.filter(id=user.id).update(last_login=timezone.now() - timedelta(days=3))
+        user.refresh_from_db()
+
+        result = evaluate_user_inactivity(user)
+
+        self.assertTrue(result.should_notify)
+        self.assertEqual(result.notification_type, "inactivity_risk")
+        self.assertEqual(result.severity, "medium")
+
+    @override_settings(
+        EMAIL_HOST="smtp.gmail.com",
+        EMAIL_PORT=587,
+        EMAIL_HOST_USER="hello@example.com",
+        EMAIL_HOST_PASSWORD="secret",
+        DEFAULT_FROM_EMAIL="SiloXR <hello@example.com>",
+    )
+    @patch("apps.notifications.dispatch.send_mail", return_value=1)
+    def test_inventory_event_signal_creates_notification(self, send_mail_mock):
+        user = self._make_user()
+        product = self._make_product(user, estimated_quantity=1, last_verified_quantity=1)
+        self._add_sales(product, [5, 5, 5], base_days_ago=1)
+
+        # Trigger a fresh event that will cause the signal to evaluate the product.
+        InventoryEvent.objects.create(
+            product=product,
+            recorded_by=user,
+            event_type=InventoryEvent.SALE,
+            quantity=2,
+            notes="signal test",
+            occurred_at=timezone.now(),
+        )
+
+        self.assertTrue(Notification.objects.filter(user=user, notification_type="stockout_risk").exists())
+        send_mail_mock.assert_called()
+
+    @override_settings(
+        EMAIL_HOST="smtp.gmail.com",
+        EMAIL_PORT=587,
+        EMAIL_HOST_USER="hello@example.com",
+        EMAIL_HOST_PASSWORD="secret",
+        DEFAULT_FROM_EMAIL="SiloXR <hello@example.com>",
+    )
+    @patch("apps.notifications.management.commands.run_proactive_checks.notify_user")
+    def test_run_proactive_checks_invokes_product_and_inactivity_paths(self, notify_mock):
+        notify_mock.return_value = NotificationDispatchResult(notification=None, created=True)
+        user = self._make_user()
+        product = self._make_product(user, estimated_quantity=2, last_verified_quantity=2)
+        self._add_sales(product, [4, 4, 4], base_days_ago=1)
+        self.user_model.objects.filter(id=user.id).update(last_login=timezone.now() - timedelta(days=3))
+        user.refresh_from_db()
+
+        result = run_proactive_checks(user_limit=1)
+
+        self.assertEqual(result.users_processed, 1)
+        self.assertGreaterEqual(result.notifications_created + result.inactivity_notifications, 1)
+        self.assertTrue(notify_mock.called)

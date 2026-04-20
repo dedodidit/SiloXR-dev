@@ -84,6 +84,13 @@ class Product(models.Model):
         return abs(self.last_verified_quantity - self.estimated_quantity)
 
     @property
+    def current_stock(self) -> float:
+        """Current operating stock view used by higher-level insight engines."""
+        estimated = float(self.estimated_quantity or 0.0)
+        verified = float(self.last_verified_quantity or 0.0)
+        return estimated if estimated > 0 else verified
+
+    @property
     def needs_verification(self) -> bool:
         """True when confidence is low enough to warrant a physical count."""
         return self.confidence_score < 0.4

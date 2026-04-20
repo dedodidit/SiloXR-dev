@@ -88,9 +88,9 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "apps.core",
-    "apps.inventory",
+    "apps.inventory.apps.InventoryConfig",
     "apps.api",
-    "apps.notifications",
+    "apps.notifications.apps.NotificationsConfig",
     "apps.billing",
     "apps.engine",
 ]
