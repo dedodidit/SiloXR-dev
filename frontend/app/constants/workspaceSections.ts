@@ -42,6 +42,13 @@ export const workspaceSections: WorkspaceSection[] = [
     helper: "Selected product focus, 7-day strip, and product table in one workspace.",
     icon: "M3 3v18h18M7 13l3-3 3 2 4-5",
   },
+  {
+    slug: "test-lab",
+    title: "Test lab",
+    description: "Run live system inputs in a sandbox and inspect the immediate output.",
+    helper: "Create a scenario, replay events, and compare baseline, live, and hybrid behavior.",
+    icon: "M7 4h10l3 4v12H4V4h3zm2 0v4h6V4",
+  },
 ]
 
 export const findWorkspaceSection = (slug: string) =>

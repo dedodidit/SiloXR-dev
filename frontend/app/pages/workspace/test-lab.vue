@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import type { DecisionSimulationResponse, ForecastStrip, InventoryEventCreate, Product } from "~/types"
+import { useDashboard } from "~/composables/useDashboard"
+import { useDecisions } from "~/composables/useDecisions"
+import { useInventory } from "~/composables/useInventory"
+import { useInventoryStore } from "~/stores/inventory"
 
 definePageMeta({ auth: true })
 
