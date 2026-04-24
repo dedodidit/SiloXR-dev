@@ -3,11 +3,9 @@ import type { DecisionSimulationResponse, ForecastStrip, InventoryEventCreate, P
 import { useDashboard } from "~/composables/useDashboard"
 import { useDecisions } from "~/composables/useDecisions"
 import { useInventory } from "~/composables/useInventory"
-import { useInventoryStore } from "~/stores/inventory"
 
 definePageMeta({ auth: true })
 
-const inventoryStore = useInventoryStore()
 const { summary } = useDashboard()
 const { fetchProducts, fetchProduct, createProduct, updateProduct, recordEvent } = useInventory()
 const { fetchForecastStrip, fetchDecisionSimulation } = useDecisions()
@@ -30,6 +28,7 @@ const savingProduct = ref(false)
 const loadingCatalog = ref(false)
 const syncingOutput = ref(false)
 const compareMode = ref<"baseline" | "live" | "mixed">("mixed")
+const catalogProducts = ref<Product[]>([])
 const error = ref("")
 const statusNote = ref("")
 const activityLog = ref<string[]>([])
@@ -78,7 +77,7 @@ const recentEvents = computed(() => productSnapshot.value?.recent_events ?? [])
 const selectedProduct = computed(() => {
   if (productSnapshot.value?.id) return productSnapshot.value
   if (!selectedProductId.value) return null
-  return inventoryStore.products.find((product) => product.id === selectedProductId.value) ?? null
+  return catalogProducts.value.find((product) => product.id === selectedProductId.value) ?? null
 })
 
 const currentMode = computed(() => {
@@ -106,6 +105,15 @@ const currentHeadline = computed(() => {
     return `${selectedProduct.value.name} is producing a ${selectedProduct.value.active_decision.action} outcome`
   }
   return `${selectedProduct.value.name} is ready for the next test`
+})
+
+const catalogByUrgency = computed(() => {
+  const order: Record<string, number> = { critical: 0, warning: 1, info: 2, ok: 3 }
+  return [...catalogProducts.value].sort((a, b) => {
+    const sa = order[a.active_decision?.severity ?? "ok"] ?? 3
+    const sb = order[b.active_decision?.severity ?? "ok"] ?? 3
+    return sa - sb
+  })
 })
 
 const productStats = computed(() => {
@@ -170,7 +178,9 @@ const refreshProductContext = async (productId: string) => {
   try {
     const product = await fetchProduct(productId)
     productSnapshot.value = product
-    inventoryStore.upsert(product)
+    const existingIndex = catalogProducts.value.findIndex((item) => item.id === product.id)
+    if (existingIndex >= 0) catalogProducts.value[existingIndex] = product
+    else catalogProducts.value.unshift(product)
     forecastStrip.value = await fetchForecastStrip(productId, 7).catch(() => [])
     if (product.active_decision?.id) {
       decisionSimulation.value = await fetchDecisionSimulation(product.active_decision.id).catch(() => null)
@@ -219,8 +229,10 @@ const saveProductProfile = async () => {
       log(`Created ${saved.name}.`)
     }
 
-    inventoryStore.upsert(saved)
     productSnapshot.value = saved
+    const existingIndex = catalogProducts.value.findIndex((item) => item.id === saved.id)
+    if (existingIndex >= 0) catalogProducts.value[existingIndex] = saved
+    else catalogProducts.value.unshift(saved)
     selectedProductId.value = saved.id
     resetDraftFromProduct(saved)
     statusNote.value = `Product saved: ${saved.name}.`
@@ -331,7 +343,8 @@ watch(
 onMounted(async () => {
   loadingCatalog.value = true
   try {
-    await inventoryStore.load()
+    const res = await fetchProducts()
+    catalogProducts.value = res.results
   } catch (err: any) {
     error.value = err?.data?.detail || "Could not load the product catalog."
   } finally {
@@ -354,7 +367,7 @@ useHead({ title: "Test lab - SiloXR" })
       </div>
       <div class="test-lab__hero-meta">
         <span class="test-lab__hero-pill">{{ currentMode }}</span>
-        <span class="test-lab__hero-pill test-lab__hero-pill--muted">{{ inventoryStore.products.length }} tracked products</span>
+        <span class="test-lab__hero-pill test-lab__hero-pill--muted">{{ catalogProducts.length }} tracked products</span>
       </div>
     </header>
 
@@ -416,7 +429,7 @@ useHead({ title: "Test lab - SiloXR" })
             <span class="test-lab__label">Target product</span>
             <select v-model="selectedProductId" class="test-lab__input">
               <option value="">New sandbox product</option>
-              <option v-for="product in inventoryStore.byUrgency" :key="product.id" :value="product.id">
+              <option v-for="product in catalogByUrgency" :key="product.id" :value="product.id">
                 {{ product.name }} ({{ product.sku }})
               </option>
             </select>
