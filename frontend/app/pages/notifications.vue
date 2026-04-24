@@ -2,6 +2,7 @@
 import type { NotificationRecord, NotificationType } from "../../types"
 
 const { $api } = useNuxtApp()
+const { summary: dashboardSummary } = useDashboard()
 
 type NotificationFilter = "all" | "unread" | "inventory" | "activity"
 
@@ -80,6 +81,8 @@ const inventoryCount = computed(() => items.value.filter((item) =>
   ["stockout_risk", "dead_stock", "drop"].includes(item.notification_type)
 ).length)
 const activityCount = computed(() => items.value.filter((item) => item.notification_type === "inactivity_risk").length)
+const baselineInUse = computed(() => Boolean(dashboardSummary.value?.baseline_in_use))
+const operatingAssumption = computed(() => String(dashboardSummary.value?.operating_assumption ?? "").trim())
 
 const filterTabs = computed(() => ([
   { key: "all" as const, label: "All", count: items.value.length },
@@ -129,6 +132,23 @@ onMounted(load)
           <strong>{{ items.length }}</strong>
         </div>
       </div>
+    </div>
+
+    <div v-if="baselineInUse" class="notification-page__baseline surface" role="note" aria-label="Industry baseline active">
+      <div class="notification-page__baseline-copy">
+        <p class="notification-page__baseline-eyebrow">Industry baseline active</p>
+        <h2 class="notification-page__baseline-title">Notifications are still learning your business.</h2>
+        <p class="notification-page__baseline-text">
+          {{
+            operatingAssumption
+              ? `${operatingAssumption} Until your own history takes over, notification context is based on similar businesses.`
+              : "Notification context is currently based on similar businesses until your own sales and stock counts build up."
+          }}
+        </p>
+      </div>
+      <NuxtLink to="/workspace/demand-intelligence" class="notification-page__baseline-link">
+        See baseline assumptions
+      </NuxtLink>
     </div>
 
     <div class="notification-page__toolbar">
@@ -217,6 +237,65 @@ onMounted(load)
   padding: 24px;
   margin-bottom: 18px;
 }
+
+.notification-page__baseline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--purple) 20%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--purple) 10%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 94%, transparent)),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--icon-accent) 16%, transparent), transparent 45%);
+}
+
+.notification-page__baseline-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.notification-page__baseline-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.notification-page__baseline-title {
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.notification-page__baseline-text {
+  max-width: 72ch;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+
+.notification-page__baseline-link {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--purple) 18%, var(--border-subtle));
+  background: color-mix(in srgb, var(--purple) 12%, var(--bg-card));
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .notification-page__eyebrow {
   font-size: 12px;
   font-weight: 700;

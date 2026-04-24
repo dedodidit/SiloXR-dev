@@ -32,6 +32,8 @@ const potentialWeeklyGap = computed(() =>
   demandDeficits.value.reduce((sum, item) => sum + Number(item?.revenue_risk_weekly ?? 0), 0)
 )
 const observedRisk = computed(() => Number(summary.value?.revenue_at_risk_total ?? 0))
+const baselineInUse = computed(() => Boolean(summary.value?.baseline_in_use))
+const operatingAssumption = computed(() => String(summary.value?.operating_assumption ?? "").trim())
 const withinNewUserWindow = computed(() => Number(daysSinceSignup.value ?? 999) < 3)
 const summaryCurrency = computed(() => String(summary.value?.user_context?.currency || "USD").toUpperCase())
 const uploadLimitCopy = computed(() =>
@@ -60,6 +62,11 @@ const statusTitle = computed(() => {
 })
 
 const statusCopy = computed(() => {
+  if (baselineInUse.value) {
+    return operatingAssumption.value
+      ? `${operatingAssumption.value} Add your own sales and stock counts to move the model from industry baseline to store-specific guidance.`
+      : "Industry baseline assumptions are active while your own sales and stock counts build up."
+  }
   if (statusDirection.value === "dash") {
     return "Your first few days stay neutral while SiloXR builds a read on the business."
   }
@@ -73,6 +80,7 @@ const statusCopy = computed(() => {
 })
 
 const statusMeta = computed(() => {
+  if (baselineInUse.value) return "Industry baseline"
   if (statusDirection.value === "dash") return "Early stage"
   return statusDirection.value === "down" ? "Attention recommended" : "Healthy posture"
 })
@@ -166,6 +174,19 @@ function formatNaira(value: number) {
         <p class="dashboard-home__subtitle">
           Choose your next move.
         </p>
+
+        <div v-if="baselineInUse" class="dashboard-home__baseline surface" role="note" aria-label="Industry baseline active">
+          <div class="dashboard-home__baseline-copy">
+            <p class="dashboard-home__baseline-eyebrow">Industry baseline active</p>
+            <h2 class="dashboard-home__baseline-title">We are still learning your store.</h2>
+            <p class="dashboard-home__baseline-text">
+              {{ statusCopy }}
+            </p>
+          </div>
+          <div class="dashboard-home__baseline-pill">
+            Baseline mode
+          </div>
+        </div>
 
         <div class="dashboard-home__starter dashboard-home__starter--hero">
           <div class="dashboard-home__starter-copy">
@@ -337,6 +358,62 @@ function formatNaira(value: number) {
   font-size: 14px;
   line-height: 1.7;
   color: var(--text-3);
+}
+
+.dashboard-home__baseline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--purple) 22%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--purple) 12%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 94%, transparent)),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--icon-accent) 18%, transparent), transparent 45%);
+}
+
+.dashboard-home__baseline-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dashboard-home__baseline-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.dashboard-home__baseline-title {
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.dashboard-home__baseline-text {
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+
+.dashboard-home__baseline-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--purple) 14%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--purple) 18%, var(--border-subtle));
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .dashboard-home__starter--hero {
