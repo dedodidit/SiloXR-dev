@@ -1602,6 +1602,8 @@ def me(request):
         "email":                        user.email,
         "tier":                         user.current_plan,
         "is_pro":                       user.is_pro,
+        "is_staff":                     bool(user.is_staff),
+        "is_superuser":                 bool(user.is_superuser),
         "business_name":                user.business_name,
         "business_type":                user.business_type,
         "country":                      user.country,

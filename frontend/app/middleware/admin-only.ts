@@ -13,7 +13,7 @@ export default defineNuxtRouteMiddleware(async () => {
     }
   }
 
-  if (!currentUser.value?.is_staff) {
+  if (!(currentUser.value?.is_staff || currentUser.value?.is_superuser)) {
     return navigateTo("/dashboard")
   }
 })
