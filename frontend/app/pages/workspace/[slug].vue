@@ -7,7 +7,6 @@ import { useBusinessHealth } from "../../composables/useBusinessHealth"
 import { useDecisions } from "../../composables/useDecisions"
 import { useInventory } from "../../composables/useInventory"
 import { useOfflineQueue } from "../../composables/useOfflineQueue"
-import WorkspaceTestLab from "./test-lab.vue"
 
 const route = useRoute()
 const slug = computed(() => String(route.params.slug ?? ""))
@@ -1073,9 +1072,6 @@ watch(dashboardRefreshTick, async () => {
         />
       </template>
 
-      <template v-else-if="resolvedSlug === 'test-lab'">
-        <WorkspaceTestLab />
-      </template>
     </section>
   </div>
 </template>

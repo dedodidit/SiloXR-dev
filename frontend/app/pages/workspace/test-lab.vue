@@ -4,7 +4,7 @@ import { useDashboard } from "~/composables/useDashboard"
 import { useDecisions } from "~/composables/useDecisions"
 import { useInventory } from "~/composables/useInventory"
 
-definePageMeta({ auth: true })
+definePageMeta({ auth: true, middleware: ["admin-only"] })
 
 const { summary } = useDashboard()
 const { fetchProducts, fetchProduct, createProduct, updateProduct, recordEvent } = useInventory()
